@@ -281,9 +281,10 @@ async function fetchRouteData(source, destination) {
 
 /**
  * Analyze route data and determine road/traffic conditions
+ * SMART ANALYSIS - Uses actual road names and patterns from API
  */
 function analyzeRouteConditions(routeData) {
-    console.log('========== ROUTE ANALYSIS DEBUG ==========');
+    console.log('========== SMART ROUTE ANALYSIS DEBUG ==========');
     
     const conditions = {
         roadType: 'City_Road',
@@ -317,28 +318,50 @@ function analyzeRouteConditions(routeData) {
     console.log('Duration:', conditions.duration, 'min');
     console.log('Total steps:', steps.length);
     
-    // Analyze road type based on instructions and road names
+    // Analyze ALL road names and instructions
+    let allRoadNames = '';
+    let allInstructions = '';
     let highwayCount = 0;
     let cityRoadCount = 0;
+    let villageRoadCount = 0;
     let junctionCount = 0;
     let turnCount = 0;
+    let straightSegments = 0;
     
     steps.forEach(step => {
         const instruction = (step.instruction || '').toLowerCase();
         const roadName = (step.name || '').toLowerCase();
         
-        // Check for highways
+        allRoadNames += ' ' + roadName;
+        allInstructions += ' ' + instruction;
+        
+        // Detect Highway/National/State Roads
         if (roadName.includes('highway') || roadName.includes('expressway') || 
-            roadName.includes('nh-') || roadName.includes('sh-') ||
+            roadName.includes('nh-') || roadName.includes('nh ') ||
+            roadName.includes('sh-') || roadName.includes('sh ') ||
+            roadName.includes('national highway') || roadName.includes('state highway') ||
             instruction.includes('highway') || instruction.includes('expressway')) {
             highwayCount++;
-        } else {
+        }
+        
+        // Detect Village/Rural Roads
+        else if (roadName.includes('village') || roadName.includes('gram') || 
+                 roadName.includes('rural') || roadName.includes('gaon') ||
+                 roadName.includes('panchayat') || roadName.includes('taluka') ||
+                 roadName.includes('khasra') || roadName.includes('unpaved') ||
+                 roadName.includes('dirt') || roadName.includes('MDR') ||
+                 roadName.includes('mdr') || roadName === '' || roadName === 'unnamed road') {
+            villageRoadCount++;
+        }
+        
+        // City Roads (named streets, main roads, etc)
+        else {
             cityRoadCount++;
         }
         
         // Check for junctions/intersections
         if (instruction.includes('roundabout') || instruction.includes('junction') || 
-            instruction.includes('intersection')) {
+            instruction.includes('intersection') || instruction.includes('cross')) {
             junctionCount++;
         }
         
@@ -347,62 +370,199 @@ function analyzeRouteConditions(routeData) {
             instruction.includes('right')) {
             turnCount++;
         }
+        
+        // Count straight segments
+        if (instruction.includes('straight') || instruction.includes('continue') ||
+            instruction.includes('head')) {
+            straightSegments++;
+        }
     });
     
+    console.log('========== ROAD ANALYSIS ==========');
     console.log('Highway segments:', highwayCount);
     console.log('City road segments:', cityRoadCount);
+    console.log('Village/Rural road segments:', villageRoadCount);
     console.log('Junctions:', junctionCount);
     console.log('Turns:', turnCount);
+    console.log('Straight segments:', straightSegments);
+    console.log('All road names:', allRoadNames.trim() || '(NONE - API did not return road names)');
     
-    // Determine road type
-    if (highwayCount > cityRoadCount) {
+    // CHECK IF API RETURNED ROAD NAMES
+    const hasRoadNames = allRoadNames.trim().length > 10; // At least some road names
+    
+    if (!hasRoadNames) {
+        console.warn('⚠️ API did not return road names! Using distance/speed analysis instead...');
+        
+        // Fallback: Analyze based on distance and average speed
+        const distanceKm = parseFloat(conditions.distance);
+        const durationMin = conditions.duration;
+        const avgSpeed = (distanceKm / durationMin) * 60; // km/h
+        
+        console.log('Average Speed:', avgSpeed.toFixed(1), 'km/h');
+        
+        // SMART DETECTION BASED ON SPEED & DISTANCE
+        if (avgSpeed > 50) {
+            // Fast route → Highway
+            conditions.roadType = 'Highway';
+            conditions.speedLimit = 80;
+            conditions.areaType = distanceKm > 15 ? 'Rural' : 'Suburban';
+            conditions.trafficVolume = 'Medium';
+            console.log('✓ Detected: Highway (high speed', avgSpeed.toFixed(1), 'km/h)');
+        } else if (avgSpeed > 25 && distanceKm > 10) {
+            // Medium speed + long distance → Highway/City with traffic
+            const currentHour = new Date().getHours();
+            const isRushHour = (currentHour >= 8 && currentHour < 11) || (currentHour >= 17 && currentHour < 20);
+            
+            if (isRushHour) {
+                // Rush hour + long route → Likely highway with traffic
+                conditions.roadType = 'Highway';
+                conditions.speedLimit = 80;
+                conditions.areaType = distanceKm > 15 ? 'Rural' : 'Suburban';
+                conditions.trafficVolume = 'High';
+                console.log('✓ Detected: Highway with traffic (rush hour,', avgSpeed.toFixed(1), 'km/h)');
+            } else {
+                // Normal time → City/Suburban roads
+                conditions.roadType = 'City_Road';
+                conditions.speedLimit = 60;
+                conditions.areaType = 'Suburban';
+                conditions.trafficVolume = 'Medium';
+                console.log('✓ Detected: City/Suburban roads (', avgSpeed.toFixed(1), 'km/h)');
+            }
+        } else if (avgSpeed < 25 && distanceKm < 8) {
+            // Slow + short → Urban with heavy traffic
+            conditions.roadType = 'City_Road';
+            conditions.speedLimit = 60;
+            conditions.areaType = 'Urban';
+            conditions.trafficVolume = 'High';
+            console.log('✓ Detected: Urban with heavy traffic (slow speed', avgSpeed.toFixed(1), 'km/h)');
+        } else if (distanceKm > 15) {
+            // Long distance → Likely inter-city highway
+            conditions.roadType = 'Highway';
+            conditions.speedLimit = 80;
+            conditions.areaType = 'Suburban';
+            conditions.trafficVolume = 'Medium';
+            console.log('✓ Detected: Highway (long distance', distanceKm, 'km)');
+        } else {
+            // Default: Rural roads
+            conditions.roadType = 'Rural_Road';
+            conditions.speedLimit = 40;
+            conditions.areaType = 'Rural';
+            conditions.trafficVolume = 'Low';
+            console.log('✓ Detected: Rural roads (default)');
+        }
+        
+        // Road design based on duration vs distance
+        if (durationMin > distanceKm * 2) {
+            conditions.roadDesign = 'Curved'; // Takes 2x longer → curvy
+        } else {
+            conditions.roadDesign = 'Straight';
+        }
+        
+        console.log('========== FINAL ANALYZED CONDITIONS (SPEED-BASED) ==========');
+        console.log('✓ Road Type:', conditions.roadType);
+        console.log('✓ Area Type:', conditions.areaType);
+        console.log('✓ Traffic Volume:', conditions.trafficVolume);
+        console.log('✓ Road Design:', conditions.roadDesign);
+        console.log('✓ Speed Limit:', conditions.speedLimit, 'km/h');
+        console.log('===============================================');
+        
+        return conditions;
+    }
+    
+    // ORIGINAL LOGIC (if road names ARE available)
+    const totalSegments = steps.length;
+    const villagePercent = (villageRoadCount / totalSegments) * 100;
+    const highwayPercent = (highwayCount / totalSegments) * 100;
+    
+    if (villagePercent > 30 || villageRoadCount > cityRoadCount) {
+        // Lots of village roads → Rural
+        conditions.roadType = 'Rural_Road';
+        conditions.speedLimit = 40;
+        console.log('✓ Detected: Rural roads (village roads > 30%)');
+    } else if (highwayPercent > 40 || highwayCount > cityRoadCount) {
+        // Mostly highways → Highway
         conditions.roadType = 'Highway';
         conditions.speedLimit = 80;
-    } else if (cityRoadCount > 0) {
+        console.log('✓ Detected: Highway (highway segments > 40%)');
+    } else {
+        // Default to city roads
         conditions.roadType = 'City_Road';
         conditions.speedLimit = 60;
-    } else {
-        conditions.roadType = 'Rural_Road';
-        conditions.speedLimit = 50;
+        console.log('✓ Detected: City Road (default)');
     }
     
-    // Determine area type based on distance and road type
-    if (conditions.distance < 5) {
-        conditions.areaType = 'Urban';
-    } else if (conditions.distance < 20) {
-        conditions.areaType = 'Suburban';
-    } else {
+    // SMART AREA TYPE DETECTION (based on road type + distance)
+    const distanceKm = parseFloat(conditions.distance);
+    
+    if (conditions.roadType === 'Rural_Road' || villageRoadCount > 3) {
         conditions.areaType = 'Rural';
-    }
-    
-    // Determine road design
-    if (junctionCount > 3) {
-        conditions.roadDesign = 'Junction';
-    } else if (turnCount > 5) {
-        conditions.roadDesign = 'Curved';
+        console.log('✓ Area: Rural (rural roads detected)');
+    } else if (conditions.roadType === 'Highway') {
+        if (distanceKm < 10) {
+            conditions.areaType = 'Suburban';
+        } else {
+            conditions.areaType = 'Rural';
+        }
+        console.log('✓ Area: Highway route -', conditions.areaType);
     } else {
-        conditions.roadDesign = 'Straight';
+        // City roads - check distance
+        if (distanceKm < 5) {
+            conditions.areaType = 'Urban';
+        } else if (distanceKm < 15) {
+            conditions.areaType = 'Suburban';
+        } else {
+            conditions.areaType = 'Rural';
+        }
+        console.log('✓ Area: Based on distance -', conditions.areaType);
     }
     
-    // Determine traffic volume based on time and road type
+    // SMART TRAFFIC VOLUME (based on area + road type + time)
     const currentHour = new Date().getHours();
     const isRushHour = (currentHour >= 8 && currentHour < 11) || (currentHour >= 17 && currentHour < 20);
     
-    if (conditions.roadType === 'City_Road' && isRushHour) {
-        conditions.trafficVolume = 'High';
-    } else if (conditions.roadType === 'Highway') {
-        conditions.trafficVolume = 'Medium';
-    } else {
+    if (conditions.areaType === 'Rural' || conditions.roadType === 'Rural_Road') {
+        // Rural areas → Low traffic
         conditions.trafficVolume = 'Low';
+        console.log('✓ Traffic: Low (rural area)');
+    } else if (conditions.areaType === 'Urban' && conditions.roadType === 'City_Road') {
+        // Urban city roads
+        if (isRushHour) {
+            conditions.trafficVolume = 'High';
+        } else {
+            conditions.trafficVolume = 'Medium';
+        }
+        console.log('✓ Traffic: Urban', conditions.trafficVolume, '(rush hour:', isRushHour, ')');
+    } else if (conditions.roadType === 'Highway') {
+        // Highways usually medium traffic
+        conditions.trafficVolume = 'Medium';
+        console.log('✓ Traffic: Medium (highway)');
+    } else {
+        // Suburban - medium traffic
+        conditions.trafficVolume = 'Medium';
+        console.log('✓ Traffic: Medium (suburban)');
     }
     
-    console.log('========== ANALYZED CONDITIONS ==========');
+    // SMART ROAD DESIGN
+    const turnDensity = turnCount / totalSegments;
+    
+    if (junctionCount > 5) {
+        conditions.roadDesign = 'Junction';
+        console.log('✓ Design: Junction (many junctions detected)');
+    } else if (turnDensity > 0.5 || turnCount > 10) {
+        conditions.roadDesign = 'Curved';
+        console.log('✓ Design: Curved (many turns detected)');
+    } else {
+        conditions.roadDesign = 'Straight';
+        console.log('✓ Design: Straight (few turns)');
+    }
+    
+    console.log('========== FINAL ANALYZED CONDITIONS ==========');
     console.log('✓ Road Type:', conditions.roadType);
     console.log('✓ Area Type:', conditions.areaType);
     console.log('✓ Traffic Volume:', conditions.trafficVolume);
     console.log('✓ Road Design:', conditions.roadDesign);
-    console.log('✓ Speed Limit:', conditions.speedLimit);
-    console.log('========================================');
+    console.log('✓ Speed Limit:', conditions.speedLimit, 'km/h');
+    console.log('===============================================');
     
     return conditions;
 }
