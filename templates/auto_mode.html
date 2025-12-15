@@ -1,9 +1,9 @@
-<!-- AUTO MODE COMPONENT - IMPROVED WITH SECTION-WISE AUTO-FILL -->
+<!-- AUTO MODE COMPONENT - FULLY UPDATED WITH ALL 3 AUTO-FILL FEATURES -->
 
 <!-- AUTO MODE FORM -->
 <form id="autoModeForm">
     
-    <!-- Location Section -->
+    <!-- Location Section - UPDATED FOR MAPS -->
     <div class="form-section">
         <div class="section-header">
             <h4>
@@ -14,18 +14,21 @@
             </h4>
         </div>
         
-        <!-- Source & Destination Inputs -->
+        <!-- Source & Destination Inputs - UPDATED -->
         <div class="row mb-3">
             <div class="col-md-6">
                 <label for="auto_source_location" class="form-label">Source Location</label>
-                <input type="text" class="form-control" id="auto_source_location" placeholder="Enter starting point" required>
-                <button type="button" class="btn btn-sm btn-outline-primary mt-2" onclick="useCurrentLocationAsSource()">
-                    <i class="fas fa-location-arrow"></i> Use Current Location
+                <input type="text" class="form-control" id="auto_source_location" placeholder="Click button to use GPS" readonly>
+                <button type="button" class="btn btn-sm btn-success mt-2 w-100" onclick="useCurrentLocationAsSource()">
+                    <i class="fas fa-location-arrow"></i> Use Current Location (GPS)
                 </button>
             </div>
             <div class="col-md-6">
                 <label for="auto_destination_location" class="form-label">Destination Location</label>
-                <input type="text" class="form-control" id="auto_destination_location" placeholder="Enter destination" required>
+                <input type="text" class="form-control" id="auto_destination_location" placeholder="Click button to select on map" readonly>
+                <button type="button" class="btn btn-sm btn-primary mt-2 w-100" onclick="openDestinationMapModal()">
+                    <i class="fas fa-map-marked-alt"></i> Select Destination on Map
+                </button>
             </div>
         </div>
 
@@ -45,10 +48,10 @@
             </div>
         </div>
 
-        <!-- Auto-fill Location Button -->
+        <!-- Auto-fill Route Button - UPDATED -->
         <div class="text-center mt-3">
-            <button type="button" class="btn btn-success btn-sm" onclick="autoFillLocationData()">
-                <i class="fas fa-magic"></i> Auto-Fill Location Data from Route
+            <button type="button" class="btn btn-success btn-sm" onclick="autoFillRouteData()">
+                <i class="fas fa-magic"></i> Analyze Route & Auto-Fill Data
             </button>
         </div>
     </div>
@@ -356,7 +359,7 @@
     </div>
 </div>
 
-<!-- WEATHER DISPLAY MODAL (Optional) -->
+<!-- WEATHER DISPLAY MODAL -->
 <div class="modal fade" id="weatherModal" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
@@ -379,6 +382,53 @@
     </div>
 </div>
 
+<!-- MAP SELECTION MODAL - NEW -->
+<div class="modal fade" id="mapSelectionModal" tabindex="-1" data-bs-backdrop="static">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-map-marked-alt"></i> Select Destination on Map</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle"></i> <strong>How to use:</strong> Click anywhere on the map to select your destination point
+                </div>
+                <div id="destinationMap" style="height: 500px; width: 100%;"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="confirmDestinationBtn" onclick="confirmDestinationSelection()" disabled>
+                    <i class="fas fa-check"></i> Confirm Destination
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ROUTE ANALYSIS MODAL - NEW -->
+<div class="modal fade" id="routeModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-route"></i> Route Analysis</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="routeDetails">
+                    <div class="text-center">
+                        <div class="loading-spinner"></div>
+                        <p>Analyzing route...</p>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Processing Overlay -->
 <div class="processing-overlay" id="processingOverlay">
     <div class="processing-content">
@@ -387,3 +437,11 @@
         <p id="processingMessage" class="text-muted">Please wait</p>
     </div>
 </div>
+
+<!-- ADD THESE SCRIPTS AT THE END OF YOUR HTML FILE (before </body>) -->
+<!-- Leaflet for Maps -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<!-- Your JavaScript Files -->
+<script src="static/js/maps.js"></script>

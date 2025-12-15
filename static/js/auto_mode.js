@@ -428,76 +428,76 @@ async function autoFillLocationData() {
     }
 }
 
-async function autoFillRouteData() {
-    const source = document.getElementById('auto_source_location').value.trim();
-    const dest = document.getElementById('auto_destination_location').value.trim();
+// async function autoFillRouteData() {
+//     const source = document.getElementById('auto_source_location').value.trim();
+//     const dest = document.getElementById('auto_destination_location').value.trim();
     
-    if (!source || !dest) {
-        alert('Please enter both source and destination');
-        return;
-    }
+//     if (!source || !dest) {
+//         alert('Please enter both source and destination');
+//         return;
+//     }
     
-    window.sharedFunctions.showProcessing('Analyzing Route', 'Getting route and traffic data...');
+//     window.sharedFunctions.showProcessing('Analyzing Route', 'Getting route and traffic data...');
     
-    try {
-        // Get route using Google Maps Directions API
-        const sourceCoords = await geocodeLocation(source);
-        const destCoords = await geocodeLocation(dest);
+//     try {
+//         // Get route using Google Maps Directions API
+//         const sourceCoords = await geocodeLocation(source);
+//         const destCoords = await geocodeLocation(dest);
         
-        const response = await fetch(
-            `https://maps.googleapis.com/maps/api/directions/json?origin=${sourceCoords.lat},${sourceCoords.lon}&destination=${destCoords.lat},${destCoords.lon}&key=${API_KEYS.GOOGLE_MAPS_KEY}`
-        );
+//         const response = await fetch(
+//             `https://maps.googleapis.com/maps/api/directions/json?origin=${sourceCoords.lat},${sourceCoords.lon}&destination=${destCoords.lat},${destCoords.lon}&key=${API_KEYS.GOOGLE_MAPS_KEY}`
+//         );
         
-        const data = await response.json();
+//         const data = await response.json();
         
-        if (data.routes && data.routes[0]) {
-            const route = data.routes[0];
-            const distance = route.legs[0].distance.value / 1000; // km
+//         if (data.routes && data.routes[0]) {
+//             const route = data.routes[0];
+//             const distance = route.legs[0].distance.value / 1000; // km
             
-            // Determine road type from distance and area
-            let roadType = 'City_Road';
-            if (distance > 50) {
-                roadType = 'Highway';
-            } else if (distance > 20) {
-                roadType = 'Rural_Road';
-            }
+//             // Determine road type from distance and area
+//             let roadType = 'City_Road';
+//             if (distance > 50) {
+//                 roadType = 'Highway';
+//             } else if (distance > 20) {
+//                 roadType = 'Rural_Road';
+//             }
             
-            // Estimate speed limit based on road type
-            const speedLimits = {
-                'Highway': 100,
-                'City_Road': 60,
-                'Rural_Road': 80
-            };
+//             // Estimate speed limit based on road type
+//             const speedLimits = {
+//                 'Highway': 100,
+//                 'City_Road': 60,
+//                 'Rural_Road': 80
+//             };
             
-            // Fill fields
-            document.getElementById('auto_road_type').value = roadType;
-            document.getElementById('auto_speed_limit').value = speedLimits[roadType];
-            document.getElementById('auto_road_design').value = 'Straight'; // Default
-            document.getElementById('auto_traffic_volume').value = 'Medium'; // Default
-            document.getElementById('auto_accident_history').value = 0; // Default
+//             // Fill fields
+//             document.getElementById('auto_road_type').value = roadType;
+//             document.getElementById('auto_speed_limit').value = speedLimits[roadType];
+//             document.getElementById('auto_road_design').value = 'Straight'; // Default
+//             document.getElementById('auto_traffic_volume').value = 'Medium'; // Default
+//             document.getElementById('auto_accident_history').value = 0; // Default
             
-            // Show badge
-            window.sharedFunctions.showAutoBadge('roadBadge');
+//             // Show badge
+//             window.sharedFunctions.showAutoBadge('roadBadge');
             
-            window.sharedFunctions.hideProcessing();
-            alert(`✅ Route data filled! Distance: ${distance.toFixed(1)} km`);
+//             window.sharedFunctions.hideProcessing();
+//             alert(`✅ Route data filled! Distance: ${distance.toFixed(1)} km`);
             
-        } else {
-            throw new Error('Could not calculate route');
-        }
+//         } else {
+//             throw new Error('Could not calculate route');
+//         }
         
-    } catch (error) {
-        window.sharedFunctions.hideProcessing();
-        console.error('Route error:', error);
-        alert('⚠️ Could not analyze route. Using default values.');
+//     } catch (error) {
+//         window.sharedFunctions.hideProcessing();
+//         console.error('Route error:', error);
+//         alert('⚠️ Could not analyze route. Using default values.');
         
-        // Fill with defaults
-        document.getElementById('auto_road_type').value = 'City_Road';
-        document.getElementById('auto_speed_limit').value = 60;
-        document.getElementById('auto_road_design').value = 'Straight';
-        document.getElementById('auto_traffic_volume').value = 'Medium';
-    }
-}
+//         // Fill with defaults
+//         document.getElementById('auto_road_type').value = 'City_Road';
+//         document.getElementById('auto_speed_limit').value = 60;
+//         document.getElementById('auto_road_design').value = 'Straight';
+//         document.getElementById('auto_traffic_volume').value = 'Medium';
+//     }
+// }
 
 async function geocodeLocation(locationName) {
     // Using OpenStreetMap Nominatim (free, no API key needed)
@@ -533,7 +533,7 @@ async function useCurrentLocationAsSource() {
 }
 
 window.autoFillLocationData = autoFillLocationData;
-window.autoFillRouteData = autoFillRouteData;
+// window.autoFillRouteData = autoFillRouteData;
 window.useCurrentLocationAsSource = useCurrentLocationAsSource;
 
 // ============================================
