@@ -1,119 +1,8 @@
-<!-- AUTO MODE COMPONENT -->
-
-<!-- Step Indicator -->
-<div class="step-indicator">
-    <div class="step active" data-step="1">
-        <div class="step-number">1</div>
-        <div class="step-label">Upload License</div>
-    </div>
-    <div class="step" data-step="2">
-        <div class="step-number">2</div>
-        <div class="step-label">Select Route</div>
-    </div>
-    <div class="step" data-step="3">
-        <div class="step-number">3</div>
-        <div class="step-label">Review & Analyze</div>
-    </div>
-</div>
-
-<!-- STEP 1: License Upload -->
-<div class="form-section" id="licenseUploadSection">
-    <div class="section-header">
-        <h4><i class="fas fa-id-card"></i> Step 1: Upload Driver's License</h4>
-    </div>
-    
-    <div class="upload-zone" id="licenseUploadZone">
-        <input type="file" id="licenseInput" accept="image/*" />
-        <div class="upload-icon">
-            <i class="fas fa-cloud-upload-alt"></i>
-        </div>
-        <h5>Click or Drag to Upload License</h5>
-        <p class="text-muted mb-0">Supports JPG, PNG (Max 5MB)</p>
-        <button type="button" class="btn btn-outline-primary mt-3" onclick="document.getElementById('licenseInput').click()">
-            <i class="fas fa-folder-open"></i> Browse Files
-        </button>
-    </div>
-
-    <div id="licensePreview" style="display:none;">
-        <img id="licenseImage" class="preview-image" alt="License Preview" />
-        <div id="licenseStatus" class="license-status processing">
-            <i class="fas fa-spinner fa-spin"></i> Processing license...
-        </div>
-        <div id="extractedInfo" style="display:none; margin-top:1rem;">
-            <div class="alert alert-info">
-                <h6><i class="fas fa-info-circle"></i> Extracted Information:</h6>
-                <ul id="extractedDataList" class="mb-0"></ul>
-            </div>
-        </div>
-        <button type="button" class="btn btn-sm btn-outline-danger mt-2" onclick="resetLicenseUpload()">
-            <i class="fas fa-times"></i> Remove & Upload Different License
-        </button>
-    </div>
-</div>
-
-<!-- STEP 2: Route Selection -->
-<div class="form-section" id="routeSelectionSection" style="display:none;">
-    <div class="section-header">
-        <h4><i class="fas fa-route"></i> Step 2: Select Your Route</h4>
-    </div>
-    
-    <div class="row">
-        <div class="col-md-6">
-            <label class="form-label">Source Location</label>
-            <input type="text" class="form-control" id="autoSourceLocation" placeholder="Enter starting point">
-            <button type="button" class="btn btn-sm btn-outline-primary mt-2" onclick="useCurrentLocationAsSource()">
-                <i class="fas fa-location-arrow"></i> Use Current Location
-            </button>
-        </div>
-        <div class="col-md-6">
-            <label class="form-label">Destination Location</label>
-            <input type="text" class="form-control" id="autoDestLocation" placeholder="Enter destination">
-        </div>
-    </div>
-
-    <div class="route-map-container" id="routeMap">
-        <div class="d-flex justify-content-center align-items-center h-100">
-            <p class="text-muted"><i class="fas fa-map-marked-alt"></i> Map will load after route selection</p>
-        </div>
-    </div>
-
-    <button type="button" class="btn btn-primary mt-3" onclick="analyzeRoute()">
-        <i class="fas fa-search"></i> Analyze Route & Get Conditions
-    </button>
-</div>
-
-<!-- STEP 3: Auto-filled Form Review -->
-<div class="form-section" id="reviewSection" style="display:none;">
-    <div class="section-header">
-        <h4><i class="fas fa-check-circle"></i> Step 3: Review Auto-Filled Data</h4>
-    </div>
-    
-    <!-- Weather Widget -->
-    <div class="weather-widget" id="weatherWidget" style="display:none;">
-        <h5><i class="fas fa-cloud-sun"></i> Current Weather Conditions</h5>
-        <div class="row">
-            <div class="col-md-3">
-                <div><strong>Weather:</strong> <span id="currentWeather">-</span></div>
-            </div>
-            <div class="col-md-3">
-                <div><strong>Temperature:</strong> <span id="currentTemp">-</span></div>
-            </div>
-            <div class="col-md-3">
-                <div><strong>Visibility:</strong> <span id="currentVisibility">-</span></div>
-            </div>
-            <div class="col-md-3">
-                <div><strong>Road Surface:</strong> <span id="roadSurfaceCondition">-</span></div>
-            </div>
-        </div>
-    </div>
-
-    <div class="alert alert-success mt-3">
-        <i class="fas fa-magic"></i> <strong>All fields auto-filled!</strong> Review below and edit if needed, then click analyze.
-    </div>
-</div>
+<!-- AUTO MODE COMPONENT - IMPROVED WITH SECTION-WISE AUTO-FILL -->
 
 <!-- AUTO MODE FORM -->
 <form id="autoModeForm">
+    
     <!-- Location Section -->
     <div class="form-section">
         <div class="section-header">
@@ -124,10 +13,27 @@
                 </span>
             </h4>
         </div>
+        
+        <!-- Source & Destination Inputs -->
+        <div class="row mb-3">
+            <div class="col-md-6">
+                <label for="auto_source_location" class="form-label">Source Location</label>
+                <input type="text" class="form-control" id="auto_source_location" placeholder="Enter starting point" required>
+                <button type="button" class="btn btn-sm btn-outline-primary mt-2" onclick="useCurrentLocationAsSource()">
+                    <i class="fas fa-location-arrow"></i> Use Current Location
+                </button>
+            </div>
+            <div class="col-md-6">
+                <label for="auto_destination_location" class="form-label">Destination Location</label>
+                <input type="text" class="form-control" id="auto_destination_location" placeholder="Enter destination" required>
+            </div>
+        </div>
+
+        <!-- Auto-filled fields -->
         <div class="row">
             <div class="col-md-8">
-                <label for="auto_location" class="form-label">Route</label>
-                <input type="text" class="form-control" id="auto_location" name="location" placeholder="Auto-filled from route" readonly>
+                <label for="auto_location" class="form-label">Route Summary</label>
+                <input type="text" class="form-control" id="auto_location" name="location" placeholder="Will be auto-filled from route" readonly>
             </div>
             <div class="col-md-4">
                 <label for="auto_area_type" class="form-label">Area Type</label>
@@ -137,6 +43,13 @@
                     <option value="Rural">Rural</option>
                 </select>
             </div>
+        </div>
+
+        <!-- Auto-fill Location Button -->
+        <div class="text-center mt-3">
+            <button type="button" class="btn btn-success btn-sm" onclick="autoFillLocationData()">
+                <i class="fas fa-magic"></i> Auto-Fill Location Data from Route
+            </button>
         </div>
     </div>
 
@@ -150,10 +63,23 @@
                 </span>
             </h4>
         </div>
+
+        <!-- License Upload Option -->
+        <div class="alert alert-info mb-3">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <i class="fas fa-id-card"></i> <strong>Quick Fill:</strong> Upload your driver's license to auto-fill this section
+                </div>
+                <button type="button" class="btn btn-primary btn-sm" onclick="openLicenseUploadModal()">
+                    <i class="fas fa-upload"></i> Upload License
+                </button>
+            </div>
+        </div>
+
         <div class="row">
             <div class="col-md-4">
                 <label for="auto_vehicle_type" class="form-label">Vehicle Type</label>
-                <select class="form-select" id="auto_vehicle_type" name="vehicle_type" disabled>
+                <select class="form-select" id="auto_vehicle_type" name="vehicle_type">
                     <option value="Car">Car</option>
                     <option value="Bike">Motorcycle/Bike</option>
                     <option value="Truck">Truck</option>
@@ -163,17 +89,17 @@
             </div>
             <div class="col-md-4">
                 <label for="auto_driver_age" class="form-label">Driver Age</label>
-                <input type="number" class="form-control" id="auto_driver_age" name="driver_age" readonly>
+                <input type="number" class="form-control" id="auto_driver_age" name="driver_age" min="16" max="80" value="30">
             </div>
             <div class="col-md-4">
                 <label for="auto_experience" class="form-label">Driving Experience (years)</label>
-                <input type="number" class="form-control" id="auto_experience" name="experience" readonly>
+                <input type="number" class="form-control" id="auto_experience" name="experience" min="0" max="50" value="5">
             </div>
         </div>
         <div class="row mt-3">
             <div class="col-md-4">
                 <label for="auto_license_valid" class="form-label">Valid License</label>
-                <select class="form-select" id="auto_license_valid" name="license_valid" disabled>
+                <select class="form-select" id="auto_license_valid" name="license_valid">
                     <option value="yes">Yes</option>
                     <option value="no">No</option>
                 </select>
@@ -198,10 +124,23 @@
                 </span>
             </h4>
         </div>
+
+        <!-- Auto-fill Weather Option -->
+        <div class="alert alert-info mb-3">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <i class="fas fa-cloud"></i> <strong>Quick Fill:</strong> Get current weather conditions automatically
+                </div>
+                <button type="button" class="btn btn-primary btn-sm" onclick="autoFillWeatherData()">
+                    <i class="fas fa-magic"></i> Get Current Weather
+                </button>
+            </div>
+        </div>
+
         <div class="row">
             <div class="col-md-3">
                 <label for="auto_weather" class="form-label">Weather</label>
-                <select class="form-select" id="auto_weather" name="weather" disabled>
+                <select class="form-select" id="auto_weather" name="weather">
                     <option value="Clear">Clear</option>
                     <option value="Rainy">Rainy</option>
                     <option value="Foggy">Foggy</option>
@@ -211,7 +150,7 @@
             </div>
             <div class="col-md-3">
                 <label for="auto_road_surface" class="form-label">Road Surface</label>
-                <select class="form-select" id="auto_road_surface" name="road_surface" disabled>
+                <select class="form-select" id="auto_road_surface" name="road_surface">
                     <option value="Dry">Dry</option>
                     <option value="Wet">Wet</option>
                     <option value="Icy">Icy</option>
@@ -220,7 +159,7 @@
             </div>
             <div class="col-md-3">
                 <label for="auto_visibility" class="form-label">Visibility</label>
-                <select class="form-select" id="auto_visibility" name="visibility" disabled>
+                <select class="form-select" id="auto_visibility" name="visibility">
                     <option value="high">High (>200m)</option>
                     <option value="medium">Medium (50-200m)</option>
                     <option value="low">Low (<50m)</option>
@@ -228,7 +167,7 @@
             </div>
             <div class="col-md-3">
                 <label for="auto_light_condition" class="form-label">Light Condition</label>
-                <select class="form-select" id="auto_light_condition" name="light_condition" disabled>
+                <select class="form-select" id="auto_light_condition" name="light_condition">
                     <option value="Daylight">Daylight</option>
                     <option value="Night_with_lights">Night (Street lights)</option>
                     <option value="Night_without_lights">Night (No lights)</option>
@@ -247,10 +186,23 @@
                 </span>
             </h4>
         </div>
+
+        <!-- Auto-fill Route Option -->
+        <div class="alert alert-info mb-3">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <i class="fas fa-route"></i> <strong>Quick Fill:</strong> Analyze route conditions automatically from your selected locations
+                </div>
+                <button type="button" class="btn btn-primary btn-sm" onclick="autoFillRouteData()">
+                    <i class="fas fa-magic"></i> Analyze Route
+                </button>
+            </div>
+        </div>
+
         <div class="row">
             <div class="col-md-4">
                 <label for="auto_road_type" class="form-label">Road Type</label>
-                <select class="form-select" id="auto_road_type" name="road_type" disabled>
+                <select class="form-select" id="auto_road_type" name="road_type">
                     <option value="City_Road">City Road</option>
                     <option value="Highway">Highway</option>
                     <option value="Rural_Road">Rural Road</option>
@@ -258,7 +210,7 @@
             </div>
             <div class="col-md-4">
                 <label for="auto_road_design" class="form-label">Road Design</label>
-                <select class="form-select" id="auto_road_design" name="road_design" disabled>
+                <select class="form-select" id="auto_road_design" name="road_design">
                     <option value="Straight">Straight</option>
                     <option value="Curved">Curved</option>
                     <option value="Junction">Junction/Intersection</option>
@@ -267,7 +219,7 @@
             </div>
             <div class="col-md-4">
                 <label for="auto_traffic_volume" class="form-label">Traffic Volume</label>
-                <select class="form-select" id="auto_traffic_volume" name="traffic_volume" disabled>
+                <select class="form-select" id="auto_traffic_volume" name="traffic_volume">
                     <option value="Low">Low</option>
                     <option value="Medium">Medium</option>
                     <option value="High">High</option>
@@ -277,11 +229,11 @@
         <div class="row mt-3">
             <div class="col-md-6">
                 <label for="auto_speed_limit" class="form-label">Speed Limit (km/h)</label>
-                <input type="number" class="form-control" id="auto_speed_limit" name="speed_limit" readonly>
+                <input type="number" class="form-control" id="auto_speed_limit" name="speed_limit" min="20" max="120" value="60">
             </div>
             <div class="col-md-6">
                 <label for="auto_current_speed" class="form-label">Current Speed (km/h)</label>
-                <input type="number" class="form-control" id="auto_current_speed" name="current_speed" value="50">
+                <input type="number" class="form-control" id="auto_current_speed" name="current_speed" min="0" max="150" value="50">
             </div>
         </div>
     </div>
@@ -299,7 +251,7 @@
         <div class="row">
             <div class="col-md-4">
                 <label for="auto_time_of_day" class="form-label">Time of Day</label>
-                <select class="form-select" id="auto_time_of_day" name="time_of_day" disabled>
+                <select class="form-select" id="auto_time_of_day" name="time_of_day">
                     <option value="Morning">Morning (6-12)</option>
                     <option value="Afternoon">Afternoon (12-17)</option>
                     <option value="Evening">Evening (17-21)</option>
@@ -308,14 +260,14 @@
             </div>
             <div class="col-md-4">
                 <label for="auto_is_weekend" class="form-label">Day Type</label>
-                <select class="form-select" id="auto_is_weekend" name="is_weekend" disabled>
+                <select class="form-select" id="auto_is_weekend" name="is_weekend">
                     <option value="false">Weekday</option>
                     <option value="true">Weekend</option>
                 </select>
             </div>
             <div class="col-md-4">
                 <label for="auto_accident_history" class="form-label">Recent Accidents in Area</label>
-                <input type="number" class="form-control" id="auto_accident_history" name="accident_history" readonly>
+                <input type="number" class="form-control" id="auto_accident_history" name="accident_history" min="0" max="20" value="0">
             </div>
         </div>
         <div class="row mt-3">
@@ -355,6 +307,76 @@
     <div class="loading-spinner"></div>
     <p class="mt-3"><i class="fas fa-cogs"></i> AI Model Processing...</p>
     <small class="text-muted">Analyzing auto-filled data...</small>
+</div>
+
+<!-- LICENSE UPLOAD MODAL -->
+<div class="modal fade" id="licenseUploadModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-id-card"></i> Upload Driver's License</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="upload-zone" id="licenseUploadZone">
+                    <input type="file" id="licenseInput" accept="image/*" />
+                    <div class="upload-icon">
+                        <i class="fas fa-cloud-upload-alt"></i>
+                    </div>
+                    <h5>Click or Drag to Upload License</h5>
+                    <p class="text-muted mb-0">Supports JPG, PNG (Max 5MB)</p>
+                    <button type="button" class="btn btn-outline-primary mt-3" onclick="document.getElementById('licenseInput').click()">
+                        <i class="fas fa-folder-open"></i> Browse Files
+                    </button>
+                </div>
+
+                <div id="licensePreview" style="display:none;">
+                    <img id="licenseImage" class="preview-image" alt="License Preview" />
+                    <div id="licenseStatus" class="license-status processing">
+                        <i class="fas fa-spinner fa-spin"></i> Processing license...
+                    </div>
+                    <div id="extractedInfo" style="display:none; margin-top:1rem;">
+                        <div class="alert alert-success">
+                            <h6><i class="fas fa-check-circle"></i> Extracted Information:</h6>
+                            <ul id="extractedDataList" class="mb-0"></ul>
+                        </div>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-outline-danger mt-2" onclick="resetLicenseUpload()">
+                        <i class="fas fa-times"></i> Remove & Upload Different License
+                    </button>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" id="applyLicenseData" onclick="applyLicenseDataToForm()" disabled>
+                    <i class="fas fa-check"></i> Apply to Form
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- WEATHER DISPLAY MODAL (Optional) -->
+<div class="modal fade" id="weatherModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-cloud-sun"></i> Current Weather</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="weatherDetails">
+                    <div class="text-center">
+                        <div class="loading-spinner"></div>
+                        <p>Fetching weather data...</p>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
 </div>
 
 <!-- Processing Overlay -->
