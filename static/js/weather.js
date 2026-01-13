@@ -112,18 +112,18 @@ function getUserLocation() {
  * Fetch weather data using FREE wttr.in API (no key needed, works with lat/lon)
  */
 async function fetchWeatherData(latitude, longitude) {
-    // Use mock data if enabled
     if (WEATHER_API_CONFIG.useMockData) {
         return getMockWeatherData();
     }
     
     try {
-        // Using FREE wttr.in API - works directly with coordinates!
-        const url = `https://wttr.in/${latitude},${longitude}?format=j1`;
+        // Using CORS proxy to bypass the restriction
+        const weatherUrl = `https://wttr.in/${latitude},${longitude}?format=j1`;
+        const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(weatherUrl)}`;
         
         console.log('Fetching weather from coordinates:', latitude, longitude);
         
-        const response = await fetch(url);
+        const response = await fetch(proxyUrl);
         
         console.log('Weather API Response Status:', response.status);
         
@@ -134,7 +134,7 @@ async function fetchWeatherData(latitude, longitude) {
         const data = await response.json();
         console.log('✓ Raw Weather Data:', data);
         
-        // Convert wttr.in format to standard format
+        // Rest of your code stays the same...
         const current = data.current_condition[0];
         const weatherData = {
             weather: [{
@@ -147,14 +147,14 @@ async function fetchWeatherData(latitude, longitude) {
                 humidity: parseFloat(current.humidity),
                 pressure: parseFloat(current.pressure)
             },
-            visibility: parseFloat(current.visibility) * 1000, // km to meters
+            visibility: parseFloat(current.visibility) * 1000,
             clouds: {
                 all: parseFloat(current.cloudcover)
             },
             wind: {
-                speed: parseFloat(current.windspeedKmph) / 3.6 // km/h to m/s
+                speed: parseFloat(current.windspeedKmph) / 3.6
             },
-            name: data.nearest_area[0].areaName[0].value // Nearest area name
+            name: data.nearest_area[0].areaName[0].value
         };
         
         console.log('✓ Converted Weather Data:', weatherData);
@@ -166,7 +166,6 @@ async function fetchWeatherData(latitude, longitude) {
         throw error;
     }
 }
-
 
 
 /**
