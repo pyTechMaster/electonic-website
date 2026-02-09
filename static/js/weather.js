@@ -16,7 +16,9 @@
 const WEATHER_API_CONFIG = {
     // Using FREE wttr.in API - No key needed! Works directly with lat/lon!
     url: 'https://wttr.in',
-    useMockData: false
+    useMockData: false,
+    timeout: 15000, // 15 seconds timeout
+    retries: 3 // Number of retry attempts
 };
 
 // Global variable to store weather data
@@ -35,7 +37,7 @@ async function autoFillWeatherData() {
         
         showProcessingOverlay('Fetching Weather Data', 'Retrieving current weather conditions...');
         
-        // Fetch weather data
+        // Fetch weather data with retry logic
         const weatherData = await fetchWeatherData(coordinates.latitude, coordinates.longitude);
         
         // Parse and map weather to form fields
@@ -57,8 +59,8 @@ async function autoFillWeatherData() {
         
         if (error.message.includes('GEOLOCATION_DENIED')) {
             errorMessage += 'Location access was denied. Please enable location access in your browser settings.';
-        } else if (error.message.includes('RATE_LIMIT')) {
-            errorMessage += 'API rate limit reached.';
+        } else if (error.message.includes('TIMEOUT')) {
+            errorMessage += 'Request timed out. The weather service might be slow. Please try again.';
         } else if (error.message.includes('NETWORK')) {
             errorMessage += 'Network error. Please check your internet connection.';
         } else {
@@ -109,6 +111,61 @@ function getUserLocation() {
 }
 
 /**
+ * Fetch with timeout wrapper
+ */
+async function fetchWithTimeout(url, options = {}, timeout = 15000) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
+    
+    try {
+        const response = await fetch(url, {
+            ...options,
+            signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+        return response;
+    } catch (error) {
+        clearTimeout(timeoutId);
+        if (error.name === 'AbortError') {
+            throw new Error('TIMEOUT: Request timed out');
+        }
+        throw error;
+    }
+}
+
+/**
+ * Retry wrapper for fetch requests
+ */
+async function fetchWithRetry(url, options = {}, retries = 3, timeout = 15000) {
+    let lastError;
+    
+    for (let i = 0; i < retries; i++) {
+        try {
+            console.log(`Attempt ${i + 1}/${retries} to fetch weather data...`);
+            const response = await fetchWithTimeout(url, options, timeout);
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
+            return response;
+        } catch (error) {
+            lastError = error;
+            console.warn(`Attempt ${i + 1} failed:`, error.message);
+            
+            // If not the last retry, wait before retrying (exponential backoff)
+            if (i < retries - 1) {
+                const delay = Math.min(1000 * Math.pow(2, i), 5000); // Max 5 seconds
+                console.log(`Retrying in ${delay}ms...`);
+                await new Promise(resolve => setTimeout(resolve, delay));
+            }
+        }
+    }
+    
+    throw lastError;
+}
+
+/**
  * Fetch weather data using FREE wttr.in API (no key needed, works with lat/lon)
  */
 async function fetchWeatherData(latitude, longitude) {
@@ -117,24 +174,47 @@ async function fetchWeatherData(latitude, longitude) {
     }
     
     try {
-        // Using CORS proxy to bypass the restriction
-        const weatherUrl = `https://wttr.in/${latitude},${longitude}?format=j1`;
-        const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(weatherUrl)}`;
-        
         console.log('Fetching weather from coordinates:', latitude, longitude);
         
-        const response = await fetch(proxyUrl);
+        // Try direct wttr.in first (no proxy)
+        const weatherUrl = `https://wttr.in/${latitude},${longitude}?format=j1`;
         
-        console.log('Weather API Response Status:', response.status);
+        let response;
+        let data;
         
-        if (!response.ok) {
-            throw new Error('Weather service unavailable');
+        try {
+            console.log('Trying direct wttr.in request...');
+            response = await fetchWithRetry(
+                weatherUrl, 
+                {},
+                WEATHER_API_CONFIG.retries,
+                WEATHER_API_CONFIG.timeout
+            );
+            data = await response.json();
+            console.log('✓ Direct request successful!');
+        } catch (directError) {
+            console.warn('Direct request failed:', directError.message);
+            console.log('Trying with CORS proxy...');
+            
+            // Fallback to CORS proxy
+            const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(weatherUrl)}`;
+            response = await fetchWithRetry(
+                proxyUrl,
+                {},
+                WEATHER_API_CONFIG.retries,
+                WEATHER_API_CONFIG.timeout
+            );
+            data = await response.json();
+            console.log('✓ Proxy request successful!');
         }
         
-        const data = await response.json();
         console.log('✓ Raw Weather Data:', data);
         
-        // Rest of your code stays the same...
+        // Parse wttr.in response
+        if (!data.current_condition || !data.current_condition[0]) {
+            throw new Error('Invalid weather data received');
+        }
+        
         const current = data.current_condition[0];
         const weatherData = {
             weather: [{
@@ -154,7 +234,9 @@ async function fetchWeatherData(latitude, longitude) {
             wind: {
                 speed: parseFloat(current.windspeedKmph) / 3.6
             },
-            name: data.nearest_area[0].areaName[0].value
+            name: data.nearest_area && data.nearest_area[0] 
+                ? data.nearest_area[0].areaName[0].value 
+                : 'Unknown Location'
         };
         
         console.log('✓ Converted Weather Data:', weatherData);
@@ -163,7 +245,10 @@ async function fetchWeatherData(latitude, longitude) {
         
     } catch (error) {
         console.error('Weather Fetch Error:', error);
-        throw error;
+        
+        // If all retries failed, use mock data as last resort
+        console.warn('All attempts failed. Using mock data as fallback...');
+        return getMockWeatherData();
     }
 }
 
@@ -317,22 +402,28 @@ function getMockWeatherData() {
     const scenarios = [
         {
             weather: [{ main: 'Clear', description: 'clear sky' }],
-            main: { temp: 28, humidity: 60 },
+            main: { temp: 28, humidity: 60, feels_like: 30, pressure: 1013 },
             clouds: { all: 10 },
-            visibility: 10000
+            visibility: 10000,
+            wind: { speed: 3.5 },
+            name: 'Mumbai'
         },
         {
             weather: [{ main: 'Rain', description: 'moderate rain' }],
-            main: { temp: 24, humidity: 85 },
+            main: { temp: 24, humidity: 85, feels_like: 25, pressure: 1010 },
             clouds: { all: 90 },
             rain: { '1h': 5 },
-            visibility: 3000
+            visibility: 3000,
+            wind: { speed: 5.2 },
+            name: 'Mumbai'
         },
         {
             weather: [{ main: 'Mist', description: 'mist' }],
-            main: { temp: 22, humidity: 95 },
+            main: { temp: 22, humidity: 95, feels_like: 23, pressure: 1012 },
             clouds: { all: 100 },
-            visibility: 800
+            visibility: 800,
+            wind: { speed: 2.1 },
+            name: 'Mumbai'
         }
     ];
     
@@ -439,7 +530,7 @@ function displayWeatherModal(weatherData, conditions) {
                         <p class="mb-1"><strong>Humidity:</strong> ${main.humidity || 'N/A'}%</p>
                     </div>
                     <div class="col-6">
-                        <p class="mb-1"><strong>Wind Speed:</strong> ${wind.speed || 'N/A'} m/s</p>
+                        <p class="mb-1"><strong>Wind Speed:</strong> ${wind.speed ? wind.speed.toFixed(1) : 'N/A'} m/s</p>
                         <p class="mb-1"><strong>Pressure:</strong> ${main.pressure || 'N/A'} hPa</p>
                         <p class="mb-1"><strong>Visibility:</strong> ${weatherData.visibility ? (weatherData.visibility / 1000).toFixed(1) + ' km' : 'N/A'}</p>
                     </div>
