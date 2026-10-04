@@ -1,0 +1,33 @@
+{
+  "name": "tinkerleaf-store",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Tinkerleaf electronics store with Node.js, Express and MongoDB backend",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "create-admin": "node server/scripts/create-admin.js",
+    "seed-products": "node server/scripts/seed-products.js",
+    "test": "node tests/e2e.test.js && node tests/frontend.test.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.2",
+    "cookie-parser": "^1.4.7",
+    "dotenv": "^17.2.2",
+    "express": "^5.1.0",
+    "express-rate-limit": "^8.2.1",
+    "helmet": "^8.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.18.1",
+    "nodemailer": "^10.0.14",
+    "pdfkit": "^0.17.1",
+    "razorpay": "^2.9.6"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "jsdom": "^30.1.1"
+  }
+}

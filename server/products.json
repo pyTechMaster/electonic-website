@@ -1,0 +1,373 @@
+[
+  {
+    "name": "ESP32-CAM WiFi Module with OV3660 3MP Camera",
+    "price": 629,
+    "originalPrice": 744,
+    "category": "products",
+    "stock": 100
+  },
+  {
+    "name": "Seeed Studio XIAO ESP32-S3 (Wi-Fi & Bluetooth 5.0)",
+    "price": 899,
+    "originalPrice": 1299,
+    "category": "products",
+    "stock": 100
+  },
+  {
+    "name": "Witty Fox 60W Soldering Iron",
+    "price": 164,
+    "originalPrice": 199,
+    "category": "products",
+    "stock": 100
+  },
+  {
+    "name": "DM002HW DIY Drone Kit with WiFi and Camera",
+    "price": 2899,
+    "originalPrice": 3649,
+    "category": "products",
+    "stock": 100
+  },
+  {
+    "name": "Raspberry Pi 3B+",
+    "price": 4725,
+    "originalPrice": 6999,
+    "category": "products",
+    "stock": 100
+  },
+  {
+    "name": "Bambu Lab A1 Combo 3D Printer with AMS Lite",
+    "price": 46999,
+    "originalPrice": 54999,
+    "category": "products",
+    "stock": 100
+  },
+  {
+    "name": "Raspberry Pi Pico W (Wi-Fi)",
+    "price": 549,
+    "originalPrice": 699,
+    "category": "products",
+    "stock": 100
+  },
+  {
+    "name": "SG90 Micro Servo Motor 9g",
+    "price": 129,
+    "originalPrice": 179,
+    "category": "products",
+    "stock": 100
+  },
+  {
+    "name": "Pluto 1.2 Educational Nano DIY Drone Kit",
+    "price": 10877,
+    "originalPrice": 13499,
+    "category": "g-new",
+    "stock": 100
+  },
+  {
+    "name": "Holybro Pixhawk 6C Flight Controller with PM02",
+    "price": 30046,
+    "originalPrice": 38499,
+    "category": "g-new",
+    "stock": 100
+  },
+  {
+    "name": "Goofoo RP700C 3D Printing Pen",
+    "price": 1329,
+    "originalPrice": 1999,
+    "category": "g-new",
+    "stock": 100
+  },
+  {
+    "name": "ACEBOTT QE035 IoT Smart Home Display Kit",
+    "price": 23929,
+    "originalPrice": 39499,
+    "category": "g-new",
+    "stock": 100
+  },
+  {
+    "name": "Bambu Lab H2S AMS Combo 3D Printer",
+    "price": 176999,
+    "originalPrice": 184999,
+    "category": "g-new",
+    "stock": 100
+  },
+  {
+    "name": "Basic Electronics Learning Kit",
+    "price": 799,
+    "originalPrice": 999,
+    "category": "g-stem",
+    "stock": 100
+  },
+  {
+    "name": "3 In 1 Educational DIY Solar Robot Kit",
+    "price": 349,
+    "originalPrice": 499,
+    "category": "g-stem",
+    "stock": 100
+  },
+  {
+    "name": "Official Makey Makey Classic Invention Kit for STEM",
+    "price": 964,
+    "originalPrice": 1199,
+    "category": "g-stem",
+    "stock": 100
+  },
+  {
+    "name": "2WD Robotics Car Kit for Students",
+    "price": 1199,
+    "originalPrice": 1499,
+    "category": "g-stem",
+    "stock": 100
+  },
+  {
+    "name": "Obstacle Avoiding Robot Kit",
+    "price": 1799,
+    "originalPrice": 2299,
+    "category": "g-stem",
+    "stock": 100
+  },
+  {
+    "name": "Arduino UNO Starter Kit for Beginners",
+    "price": 1499,
+    "originalPrice": 1899,
+    "category": "g-stem",
+    "stock": 100
+  },
+  {
+    "name": "ESP32 IoT Learning Kit",
+    "price": 1899,
+    "originalPrice": 2399,
+    "category": "g-stem",
+    "stock": 100
+  },
+  {
+    "name": "Simple Circuits Science Kit",
+    "price": 399,
+    "originalPrice": 499,
+    "category": "g-stem",
+    "stock": 100
+  },
+  {
+    "name": "Mini DIY Drone Kit for Beginners",
+    "price": 1599,
+    "originalPrice": 1999,
+    "category": "g-stem",
+    "stock": 100
+  },
+  {
+    "name": "DIY Drone Learning Kit with Camera",
+    "price": 2499,
+    "originalPrice": 2999,
+    "category": "g-stem",
+    "stock": 100
+  },
+  {
+    "name": "Digital Multimeter",
+    "price": 449,
+    "originalPrice": 599,
+    "category": "g-tools",
+    "stock": 100
+  },
+  {
+    "name": "Soldering Wire 50g",
+    "price": 129,
+    "originalPrice": 180,
+    "category": "g-tools",
+    "stock": 100
+  },
+  {
+    "name": "Wire Stripper and Cutter Set",
+    "price": 249,
+    "originalPrice": 349,
+    "category": "g-tools",
+    "stock": 100
+  },
+  {
+    "name": "Helping Hands Soldering Stand",
+    "price": 299,
+    "originalPrice": 399,
+    "category": "g-tools",
+    "stock": 100
+  },
+  {
+    "name": "Soldering Flux Paste",
+    "price": 99,
+    "originalPrice": 149,
+    "category": "g-tools",
+    "stock": 100
+  },
+  {
+    "name": "Desoldering Pump",
+    "price": 129,
+    "originalPrice": 179,
+    "category": "g-tools",
+    "stock": 100
+  },
+  {
+    "name": "Needle Nose Pliers",
+    "price": 199,
+    "originalPrice": 279,
+    "category": "g-tools",
+    "stock": 100
+  },
+  {
+    "name": "Precision Screwdriver Set",
+    "price": 349,
+    "originalPrice": 499,
+    "category": "g-tools",
+    "stock": 100
+  },
+  {
+    "name": "Digital Vernier Caliper",
+    "price": 399,
+    "originalPrice": 549,
+    "category": "g-tools",
+    "stock": 100
+  },
+  {
+    "name": "Adjustable DC Power Supply",
+    "price": 3499,
+    "originalPrice": 4299,
+    "category": "g-tools",
+    "stock": 100
+  },
+  {
+    "name": "Arduino UNO R3 Compatible Board",
+    "price": 549,
+    "originalPrice": 699,
+    "category": "g-components",
+    "stock": 100
+  },
+  {
+    "name": "NodeMCU ESP8266 WiFi Board",
+    "price": 349,
+    "originalPrice": 449,
+    "category": "g-components",
+    "stock": 100
+  },
+  {
+    "name": "Arduino Nano Compatible Board",
+    "price": 399,
+    "originalPrice": 499,
+    "category": "g-components",
+    "stock": 100
+  },
+  {
+    "name": "Jumper Wires Pack of 120",
+    "price": 149,
+    "originalPrice": 199,
+    "category": "g-components",
+    "stock": 100
+  },
+  {
+    "name": "Resistor Assortment Kit",
+    "price": 299,
+    "originalPrice": 399,
+    "category": "g-components",
+    "stock": 100
+  },
+  {
+    "name": "Capacitor Assortment Kit",
+    "price": 349,
+    "originalPrice": 449,
+    "category": "g-components",
+    "stock": 100
+  },
+  {
+    "name": "LED Assortment Pack",
+    "price": 199,
+    "originalPrice": 249,
+    "category": "g-components",
+    "stock": 100
+  },
+  {
+    "name": "5V Relay Module 1 Channel",
+    "price": 79,
+    "originalPrice": 119,
+    "category": "g-components",
+    "stock": 100
+  },
+  {
+    "name": "L298N Motor Driver Module",
+    "price": 179,
+    "originalPrice": 249,
+    "category": "g-components",
+    "stock": 100
+  },
+  {
+    "name": "HC-SR04 Ultrasonic Sensor",
+    "price": 99,
+    "originalPrice": 149,
+    "category": "g-components",
+    "stock": 100
+  },
+  {
+    "name": "DHT11 Temperature and Humidity Sensor",
+    "price": 129,
+    "originalPrice": 179,
+    "category": "g-components",
+    "stock": 100
+  },
+  {
+    "name": "0.96 inch I2C OLED Display",
+    "price": 199,
+    "originalPrice": 299,
+    "category": "g-displays",
+    "stock": 100
+  },
+  {
+    "name": "1.3 inch I2C OLED Display",
+    "price": 349,
+    "originalPrice": 449,
+    "category": "g-displays",
+    "stock": 100
+  },
+  {
+    "name": "16x2 LCD Display with I2C Module",
+    "price": 249,
+    "originalPrice": 349,
+    "category": "g-displays",
+    "stock": 100
+  },
+  {
+    "name": "20x4 LCD Display with I2C Module",
+    "price": 449,
+    "originalPrice": 549,
+    "category": "g-displays",
+    "stock": 100
+  },
+  {
+    "name": "2.4 inch TFT Display Module",
+    "price": 449,
+    "originalPrice": 599,
+    "category": "g-displays",
+    "stock": 100
+  },
+  {
+    "name": "1.8 inch SPI TFT Display",
+    "price": 299,
+    "originalPrice": 399,
+    "category": "g-displays",
+    "stock": 100
+  },
+  {
+    "name": "3.5 inch TFT Touch Display Shield",
+    "price": 899,
+    "originalPrice": 1199,
+    "category": "g-displays",
+    "stock": 100
+  },
+  {
+    "name": "4-Digit 7-Segment Display",
+    "price": 99,
+    "originalPrice": 149,
+    "category": "g-displays",
+    "stock": 100
+  },
+  {
+    "name": "8x8 LED Dot Matrix Display",
+    "price": 129,
+    "originalPrice": 179,
+    "category": "g-displays",
+    "stock": 100
+  }
+]
