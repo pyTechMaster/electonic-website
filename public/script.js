@@ -54,8 +54,15 @@ function apiJSON(url,opt){return fetch(url,Object.assign({credentials:'same-orig
 function saveCartServer(){if(!account)return;clearTimeout(cartSaveTimer);cartSaveTimer=setTimeout(function(){apiJSON('/api/cart',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({items:Object.keys(cart).map(function(n){return {name:n,quantity:cart[n]}})})}).catch(function(e){toast('⚠️ Cart could not be synced: '+e.message)})},180)}
 function flushCartServer(){clearTimeout(cartSaveTimer);if(!account)return Promise.resolve();return apiJSON('/api/cart',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({items:Object.keys(cart).map(function(n){return {name:n,quantity:cart[n]}})})})}
 function syncCartAfterAuth(){if(!account)return;apiJSON('/api/cart').then(function(r){var merged={};(r.items||[]).forEach(function(x){merged[x.name]=x.quantity});Object.keys(cart).forEach(function(n){merged[n]=Math.min((merged[n]||0)+cart[n],9999)});cart=merged;upd();saveCartServer()}).catch(function(){})}
-function applyPrices(){document.querySelectorAll('.prod').forEach(function(c){var h=c.querySelector('h3'),pe=c.querySelector('.price');if(!h||!pe)return;var n=h.textContent;if(PR[n]!==undefined&&pe.firstChild&&pe.firstChild.nodeType===3)pe.firstChild.nodeValue=f(PR[n])})}
-function loadServerStock(){apiJSON('/api/products').then(function(ps){serverStock={};var pc=false;ps.forEach(function(p){serverStock[p.name]=Number(p.stock||0);serverMeta[p.name]=Date.parse(p.createdAt)||0;var pr=Number(p.price);if(Object.prototype.hasOwnProperty.call(PR,p.name)&&Number.isFinite(pr)&&PR[p.name]!==pr){PR[p.name]=pr;pc=true}});applyStock();if(pc){applyPrices();upd()}if(window.TLshop&&TLshop.refresh)TLshop.refresh()}).catch(function(){})}
+function applyPrices(){document.querySelectorAll('.prod').forEach(function(c){var h=c.querySelector('h3'),pe=c.querySelector('.price');if(!h||!pe)return;var n=h.textContent,pr=PR[n];if(pr===undefined)return;
+ var op=(OP[n]!==undefined&&OP[n]>pr)?OP[n]:0;
+ /* price + struck-through MRP, then the Sale % badge and the "Save" line follow the same numbers (they used to keep the old ones) */
+ pe.innerHTML=f(pr)+(op?'<s>'+f(op)+'</s>':'');
+ var sale=c.querySelector('.sale'),sv=c.querySelector('.sv');
+ if(sale){if(op)sale.textContent='Sale '+Math.round((op-pr)/op*100)+'%';else sale.remove()}
+ if(sv){if(op)sv.textContent='Save ₹'+(op-pr).toLocaleString('en-IN');else sv.remove()}
+})}
+function loadServerStock(){apiJSON('/api/products').then(function(ps){serverStock={};var pc=false;ps.forEach(function(p){serverStock[p.name]=Number(p.stock||0);serverMeta[p.name]=Date.parse(p.createdAt)||0;var pr=Number(p.price);if(Object.prototype.hasOwnProperty.call(PR,p.name)){if(Number.isFinite(pr)&&PR[p.name]!==pr){PR[p.name]=pr;pc=true}var mo=Number(p.originalPrice);if(p.originalPrice!==undefined&&p.originalPrice!==null&&Number.isFinite(mo)&&mo>0&&OP[p.name]!==mo){OP[p.name]=mo;pc=true}}});applyStock();if(pc){applyPrices();upd()}if(window.TLshop&&TLshop.refresh)TLshop.refresh()}).catch(function(){})}
 loadServerStock();
 apiJSON('/api/auth/me').then(function(r){var wasIn=!!account;if(r.user){account={name:r.user.name,email:r.user.email,role:r.user.role};sv('tl_account',account);syncCartAfterAuth();if(!wasIn&&/^#pg=(orders|track)/.test(location.hash))route();}else if(account){account=null;sv('tl_account',null);}}).catch(function(){});
 apiJSON('/api/payments/razorpay/config').then(function(r){if(r.enabled&&r.keyId)CFG.RZP_KEY=r.keyId;}).catch(function(){});
@@ -65,7 +72,7 @@ function $(i){return document.getElementById(i)}
 function toast(m){var t=$('ts');t.textContent=m;t.classList.add('on');clearTimeout(toast.t);toast.t=setTimeout(function(){t.classList.remove('on')},2200)}
 function cnt(){return Object.keys(cart).reduce(function(a,k){return a+cart[k]},0)}
 function total(){return Object.keys(cart).reduce(function(a,k){return a+cart[k]*(PR[k]||0)},0)}
-function upd(){$('cc').textContent=cnt();$('wc').textContent=wish.length;
+function upd(){if(typeof coupon!=='undefined'&&coupon&&coupon.sub!==total())coupon=null;$('cc').textContent=cnt();$('wc').textContent=wish.length;
  var mb=$('mobileCartBar'),mc=$('mobileCartCount'),mt=$('mobileCartTotal');if(mb&&mc&&mt){var c=cnt(),t=total();mb.classList.toggle('has-items',c>0);mc.textContent=c?c+' item'+(c===1?'':'s'):'Cart is empty';mt.textContent=c?rup(t):'View cart';}
  document.querySelectorAll('.heart').forEach(function(h){var on=wish.indexOf(h.dataset.n)>-1;h.textContent=on?'❤️':'🤍';h.setAttribute('aria-pressed',on)});
  sv('tl_cart',cart);sv('tl_wish',wish);saveCartServer()}
@@ -160,7 +167,7 @@ $('db').addEventListener('change',function(e){var q=e.target.closest('[data-q]')
 $('db').addEventListener('click',function(e){var t=e.target.closest('[data-a],[data-c],[data-w],[data-m],[data-p],[data-track],[data-deladdr]');if(!t)return;var d=t.dataset;if(t.tagName==='A'&&t.getAttribute('href')==='#')e.preventDefault();
  if(d.deladdr!==undefined){apiJSON('/api/addresses/'+d.deladdr,{method:'DELETE'}).then(function(){loadAddressesView();toast('Address removed')});return}
  if(t.dataset.cancelOrder){var oid=t.dataset.cancelOrder;if(confirm('Cancel order '+oid+'?')){var reason=prompt('Reason (optional):','Customer requested cancellation')||'Customer requested cancellation';apiJSON('/api/orders/'+encodeURIComponent(oid)+'/cancel',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({reason:reason})}).then(function(){toast('✅ Order cancelled');show('orders')}).catch(function(e){toast('⚠️ '+e.message)})}return}
- if(t.dataset.returnOrder){var rid=t.dataset.returnOrder,rr=prompt('Why do you want to return this order?');if(rr){apiJSON('/api/orders/'+encodeURIComponent(rid)+'/return-request',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({reason:rr})}).then(function(){toast('✅ Return request submitted');show('orders')}).catch(function(e){toast('⚠️ '+e.message)})}return}if(d.a==='checkout'){if(!account){accountModal('create');toast('👤 Please create an account or sign in before checkout.');return}show('checkout');return}if(d.a==='place'){placeOrder();return}if(d.a==='payok'){confirmPay();return}if(d.a==='paychg'){show('checkout');return}if(d.a==='copyupi'){copyUPI();return}if(d.a==='back'){show('cart');return}if(d.a==='wish'||d.a==='cart'||d.a==='orders'||d.a==='addresses')show(d.a);else if(d.a==='x'||d.a==='x2')closeAll();
+ if(t.dataset.returnOrder){var rid=t.dataset.returnOrder,rr=prompt('Why do you want to return this order?');if(rr){apiJSON('/api/orders/'+encodeURIComponent(rid)+'/return-request',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({reason:rr})}).then(function(){toast('✅ Return request submitted');show('orders')}).catch(function(e){toast('⚠️ '+e.message)})}return}if(d.a==='applycoupon'){applyCoupon();return}if(d.a==='rmcoupon'){coupon=null;refreshCheckoutTotals();return}if(d.a==='checkout'){if(!account){accountModal('create');toast('👤 Please create an account or sign in before checkout.');return}show('checkout');return}if(d.a==='place'){placeOrder();return}if(d.a==='payok'){confirmPay();return}if(d.a==='paychg'){show('checkout');return}if(d.a==='copyupi'){copyUPI();return}if(d.a==='back'){show('cart');return}if(d.a==='wish'||d.a==='cart'||d.a==='orders'||d.a==='addresses')show(d.a);else if(d.a==='x'||d.a==='x2')closeAll();
  else if(d.c){addC(d.c);show('wish')}else if(d.w)togW(d.w);
  else if(d.p){cart[d.p]++;upd();show('cart')}
  else if(d.m){cart[d.m]--;if(cart[d.m]<1)delete cart[d.m];upd();show('cart')}});
@@ -363,6 +370,22 @@ function loadAddressesView(){
  if(!account){accountModal('create');return}apiJSON('/api/addresses').then(function(list){var b=$('db'),h='<div class="note">Saved addresses are securely linked to your Tinkerleaf account.</div>';h+=list.length?list.map(function(a,i){return '<div class="account-card" style="margin:10px 0"><b>'+esc(a.label||'Address '+(i+1))+'</b><span>'+esc(a.name)+' • '+esc(a.phone)+'</span><span>'+esc(a.address)+', '+esc(a.city)+' - '+esc(a.pin)+'</span><button class="rm" data-deladdr="'+i+'" style="margin-top:8px">Remove</button></div>'}).join(''):'<div class="empty">No saved addresses yet.</div>';h+='<button class="btn" data-a="checkout" style="margin-top:10px">＋ Add address during checkout</button>';b.innerHTML=h;b.scrollTop=0;}).catch(function(e){$('db').innerHTML='<div class="ce">'+esc(e.message)+'</div>'});
 }
 function orderStatusLabel(s){return ({placed:'Order placed',confirmed:'Confirmed',packed:'Packed',shipped:'Shipped',delivered:'Delivered',cancelled:'Cancelled'})[s]||s}
+/* ---- Coupons (the server re-checks every coupon and calculates the real discount) ---- */
+var coupon=null;
+function totalsHTML(){var T=total(),S=shipFor(T),D=(coupon&&coupon.sub===T)?coupon.discount:0;
+ return '<div class="cs"><span>Subtotal</span><span>'+rup(T)+'</span></div>'+(D?'<div class="cs" style="color:var(--green)"><span>🎟️ Coupon '+esc(coupon.code)+'</span><span>− '+rup(D)+'</span></div>':'')+'<div class="cs"><span>Delivery</span><span>'+(S?rup(S):'FREE')+'</span></div><div class="cs t"><span>Total</span><span>'+rup(T-D+S)+'</span></div>'}
+function couponBoxHTML(){
+ if(coupon&&coupon.sub===total())return '<div class="note" style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap">🎟️ <span><b>'+esc(coupon.code)+'</b> applied — you save <b>'+rup(coupon.discount)+'</b>'+(coupon.desc?'<br><small>'+esc(coupon.desc)+'</small>':'')+'</span><button type="button" class="btn alt" data-a="rmcoupon" style="padding:6px 12px;cursor:pointer;font:inherit">Remove</button></div>';
+ return '<label class="l" for="cpnIn">🎟️ Have a coupon code?</label><div class="row" style="gap:8px;align-items:stretch"><input id="cpnIn" placeholder="Enter coupon code" autocapitalize="characters" autocomplete="off" maxlength="20" style="flex:1;text-transform:uppercase"><button type="button" class="btn alt" data-a="applycoupon" style="cursor:pointer;font:inherit">Apply</button></div><div id="cpnMsg" class="note" style="margin-top:6px;display:none"></div>'}
+function refreshCheckoutTotals(){var a=$('couponBox'),b=$('ckTotals');if(a)a.innerHTML=couponBoxHTML();if(b)b.innerHTML=totalsHTML()}
+function applyCoupon(){var inp=$('cpnIn'),msg=$('cpnMsg');if(!inp||!msg)return;
+ var code=inp.value.trim().toUpperCase(),say=function(t){msg.style.display=t?'block':'none';msg.textContent=t||''};
+ if(!account){accountModal('create');toast('👤 Please create an account or sign in to use a coupon.');return}
+ if(!code){say('⚠️ Enter a coupon code.');return}
+ say('Checking coupon…');
+ flushCartServer().then(function(){return apiJSON('/api/coupons/validate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:code})})}).then(function(r){
+  coupon={code:r.code,discount:r.discount,desc:r.description||'',sub:total()};refreshCheckoutTotals();toast('🎟️ Coupon applied — you save '+rup(r.discount))
+ }).catch(function(e){coupon=null;var m=$('cpnMsg');if(m){m.style.display='block';m.textContent='⚠️ '+e.message}})}
 function checkoutHTML(){var ks=Object.keys(cart),T=total(),S=shipFor(T),u=guest||{};
  var h='<div class="cf"><a href="#" data-a="back" class="lnk" style="text-align:left;margin:0 0 6px">‹ Back to cart</a>';
  h+='<h4>📦 Delivery details</h4><div id="savedAddressBox" class="note">Loading saved addresses…</div>'; 
@@ -378,7 +401,7 @@ function checkoutHTML(){var ks=Object.keys(cart),T=total(),S=shipFor(T),u=guest|
  h+='<label class="pmo"><input type="radio" name="pm" value="cod" checked><span><b>💵 Cash on Delivery</b><small>Pay in cash when your order arrives.</small></span></label>';
  if(CFG.RZP_KEY)h+='<label class="pmo"><input type="radio" name="pm" value="online"><span><b>📲 Online payment</b><small>Pay securely with UPI, cards or net banking (Razorpay). Your order is placed right after the payment succeeds.</small></span></label>';else h+='<div class="note">📲 Online payment is temporarily unavailable. Cash on Delivery is available.</div>';
  h+='<h4>🧾 Order summary</h4>'+ks.map(function(n){return '<div class="cs"><span>'+esc(n)+' × '+cart[n]+'</span><span>'+rup(cart[n]*(PR[n]||0))+'</span></div>'}).join('');
- h+='<div class="cs"><span>Subtotal</span><span>'+rup(T)+'</span></div><div class="cs"><span>Delivery</span><span>'+(S?rup(S):'FREE')+'</span></div><div class="cs t"><span>Total</span><span>'+rup(T+S)+'</span></div>';
+ h+='<div id="couponBox">'+couponBoxHTML()+'</div><div id="ckTotals">'+totalsHTML()+'</div>';
  h+='<div class="note">🚚 '+(S?'Delivery charge: <b>'+rup(S)+'</b>. Orders of '+rup(CFG.FREE_ABOVE)+' and above get <b>free delivery</b>.':'You get <b>free delivery</b> on this order.')+' We deliver all over India. See our <a href="#pg=policy" data-a="x">Return, Refund &amp; Delivery Policy</a>. A bill / invoice is provided with every order.</div>';
  h+='<div class="ce" id="ce" role="alert"></div><button class="btn" id="plc" data-a="place" style="display:block;width:100%;border:0;cursor:pointer;font:inherit;font-weight:600">✅ Place order</button><div class="note" style="margin-top:12px;font-size:.85rem">By placing your order you agree to our <a href="#pg=terms" data-a="x">Terms &amp; Conditions</a>.</div></div>';
  return h}
@@ -407,10 +430,10 @@ function placeOrder(){if(!account){accountModal('create');toast('👤 Please cre
  if(!Object.keys(cart).length){er.textContent='⚠️ Your cart is empty.';return}
  var oo=Object.keys(cart).filter(function(k){return !inStock(k)});
  if(oo.length){oo.forEach(function(k){delete cart[k]});upd();toast('⚠️ Out of stock, removed from cart: '+oo.join(', '));show('cart');return}
- var T=total(),S=shipFor(T),id='TL'+String(Date.now()).slice(-8);
+ var T=total(),S=shipFor(T),D=(coupon&&coupon.sub===T)?coupon.discount:0,id='TL'+String(Date.now()).slice(-8);
  if($('saveAddress')&&$('saveAddress').checked) saveAddress({label:'Home',name:n,phone:ph,address:ad,city:ct,pin:pn});
  var paymentKey=(window.crypto&&crypto.randomUUID)?crypto.randomUUID():('tl-'+Date.now()+'-'+Math.random().toString(36).slice(2));
- var o={id:id,paymentKey:paymentKey,items:JSON.parse(JSON.stringify(cart)),sub:T,ship:S,total:T+S,name:n,phone:ph,address:ad,city:ct,pin:pn,pm:pm,ts:Date.now(),email:em,biz:biz,gstin:gst};
+ var o={id:id,paymentKey:paymentKey,items:JSON.parse(JSON.stringify(cart)),sub:T,ship:S,disc:D,coupon:D?coupon.code:'',total:T-D+S,name:n,phone:ph,address:ad,city:ct,pin:pn,pm:pm,ts:Date.now(),email:em,biz:biz,gstin:gst};
  lastOrder=o;
  /* Online payment: pehle QR/payment screen. WhatsApp tab tak nahi khulega jab tak payment confirm na ho. */
  var pb0=$('plc');if(pb0){pb0.disabled=true;pb0.textContent='⏳ Checking your cart…'}
@@ -423,22 +446,22 @@ function placeOrder(){if(!account){accountModal('create');toast('👤 Please cre
 function loadRzp(ok,fail){if(window.Razorpay)return ok();var sc=document.createElement('script');sc.src='https://checkout.razorpay.com/v1/checkout.js';sc.onload=ok;sc.onerror=fail;document.head.appendChild(sc)}
 function payRzp(o){var b=$('plc'),er=$('ce'),reset=function(){if(b){b.disabled=false;payBtnLabel()}};
  b.disabled=true;b.textContent='⏳ Preparing secure payment…';er.textContent='';
- apiJSON('/api/payments/razorpay/order',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({receipt:o.id,idempotencyKey:o.paymentKey})}).then(function(ro){
+ apiJSON('/api/payments/razorpay/order',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({receipt:o.id,idempotencyKey:o.paymentKey,couponCode:o.coupon||''})}).then(function(ro){
   return new Promise(function(resolve,reject){loadRzp(function(){
    var items=Object.keys(o.items).map(function(k){return k+' x '+o.items[k]}).join(', ');
    var r=new Razorpay({key:ro.keyId,order_id:ro.id,amount:ro.amount,currency:ro.currency,name:'Tinkerleaf',description:'Order '+o.id,prefill:{name:o.name,contact:o.phone,email:o.email||''},notes:{order_id:o.id,name:o.name,phone:o.phone,items:items.slice(0,250),address:(o.address+', '+o.city+' - '+o.pin).slice(0,250)},theme:{color:'#1f5c3f'},handler:function(res){resolve(res)},modal:{ondismiss:function(){reject(new Error('Payment cancelled. Your cart is safe.'))}}});
    r.on('payment.failed',function(x){reject(new Error('Payment failed'+(x&&x.error&&x.error.description?': '+x.error.description:'')))});r.open();
   },function(){reject(new Error('Could not load the payment window. Check your internet and try again.'))})});
- }).then(function(res){return apiJSON('/api/payments/razorpay/verify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({razorpay_order_id:res.razorpay_order_id,razorpay_payment_id:res.razorpay_payment_id,razorpay_signature:res.razorpay_signature,idempotencyKey:o.paymentKey})}).then(function(v){o.rzp=res.razorpay_payment_id;o.rzpOrderId=res.razorpay_order_id;o.rzpSignature=res.razorpay_signature;o.paid=true;finishOrder(o)})}).catch(function(e){reset();er.textContent='⚠️ '+e.message});}
+ }).then(function(res){return apiJSON('/api/payments/razorpay/verify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({razorpay_order_id:res.razorpay_order_id,razorpay_payment_id:res.razorpay_payment_id,razorpay_signature:res.razorpay_signature,idempotencyKey:o.paymentKey,couponCode:o.coupon||''})}).then(function(v){o.rzp=res.razorpay_payment_id;o.rzpOrderId=res.razorpay_order_id;o.rzpSignature=res.razorpay_signature;o.paid=true;finishOrder(o)})}).catch(function(e){reset();er.textContent='⚠️ '+e.message});}
 function orderMsg(o){var ks=Object.keys(o.items);
  var pl=o.pm==='cod'?'Cash on Delivery':'Online payment (UPI) - PAID';
- return '🛒 New order '+o.id+'\n'+ks.map(function(k){return '- '+k+' x '+o.items[k]+' = ₹'+(o.items[k]*(PR[k]||0))}).join('\n')+'\nSubtotal: ₹'+o.sub+'\nDelivery: '+(o.ship?'₹'+o.ship:'FREE')+'\nTotal: ₹'+o.total+'\nPayment: '+pl
+ return '🛒 New order '+o.id+'\n'+ks.map(function(k){return '- '+k+' x '+o.items[k]+' = ₹'+(o.items[k]*(PR[k]||0))}).join('\n')+'\nSubtotal: ₹'+o.sub+(o.disc?'\nCoupon '+o.coupon+': -₹'+o.disc:'')+'\nDelivery: '+(o.ship?'₹'+o.ship:'FREE')+'\nTotal: ₹'+o.total+'\nPayment: '+pl
   +(o.pm==='online'?'\nAmount paid: ₹'+o.total+(o.rzp?'\nRazorpay Payment ID: '+o.rzp:'\nUPI Txn ID (UTR): '+o.utr+'\n(I will share the payment screenshot in this chat)'):'')
   +'\n\nName: '+o.name+'\nPhone: '+o.phone+'\nAddress: '+o.address+', '+o.city+' - '+o.pin+(o.email?'\nEmail: '+o.email:'')+(o.gstin?'\nGST invoice: '+o.biz+' ('+o.gstin+')':'')}
 function finishOrder(o){
  var rec=!!CFG.ORDER_URL;o.pend=rec;
  sv('tl_guest',{name:o.name,phone:o.phone,address:o.address,city:o.city,pin:o.pin,email:o.email||'',biz:o.biz||'',gstin:o.gstin||''});
- var body=JSON.stringify({customer:{name:o.name,phone:o.phone,email:o.email||'',address:o.address,city:o.city,pin:o.pin,business:o.biz||'',gstin:o.gstin||''},paymentMethod:o.pm,paymentId:o.rzp||'',razorpayOrderId:o.rzpOrderId||'',razorpaySignature:o.rzpSignature||'',idempotencyKey:o.paymentKey||''});
+ var body=JSON.stringify({customer:{name:o.name,phone:o.phone,email:o.email||'',address:o.address,city:o.city,pin:o.pin,business:o.biz||'',gstin:o.gstin||''},paymentMethod:o.pm,paymentId:o.rzp||'',razorpayOrderId:o.rzpOrderId||'',razorpaySignature:o.rzpSignature||'',idempotencyKey:o.paymentKey||'',couponCode:o.coupon||''});
  /* The server calculates items/prices/total itself. Same idempotency key => a retry can never create a 2nd order. */
  function attempt(n){
   return fetch('/api/orders',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:body}).then(function(r){
@@ -449,7 +472,7 @@ function finishOrder(o){
   });
  }
  attempt(0).then(function(saved){
-   o.id=saved.orderId||o.id;o.serverOrderId=o.id;o.pend=false;
+   o.id=saved.orderId||o.id;o.serverOrderId=o.id;o.pend=false;if(typeof saved.total==='number'){o.total=saved.total;o.disc=saved.discount||0;o.coupon=saved.couponCode||''}coupon=null;
    var od=ld('tl_orders',[]);od.push(o);sv('tl_orders',od);
    o.wa='https://wa.me/'+WA+'?text='+encodeURIComponent(orderMsg(o));lastOrder=o;
    cart={};upd();loadServerStock();show('done');
@@ -460,7 +483,7 @@ function finishOrder(o){
    if(o.pm==='online'&&o.paid) toast('💳 Payment received but the order could not be saved. If it does not appear in My Orders, the amount is refunded automatically within about 30 minutes, or message us on WhatsApp.');
  });}
 /* ---- order notification: Google Sheet (Apps Script) / Formspree ---- */
-function orderPayload(o){var ks=Object.keys(o.items),pl={order_id:o.id,time:new Date(o.ts).toLocaleString('en-IN'),name:o.name,phone:o.phone,customer_email:o.email||'',gst_business:o.biz||'',gstin:o.gstin||'',address:o.address,city:o.city,pincode:o.pin,items:ks.map(function(k){return k+' x '+o.items[k]+' = ₹'+(o.items[k]*(PR[k]||0))}).join(' | '),subtotal:o.sub,delivery:o.ship,total:o.total,payment:o.pm==='cod'?'Cash on Delivery':(o.rzp?'Online (Razorpay)':'Online (UPI)'),utr:o.utr||'',rzp_payment_id:o.rzp||'',paid:o.paid?'YES':'NO',_subject:'New order '+o.id+' - ₹'+o.total};
+function orderPayload(o){var ks=Object.keys(o.items),pl={order_id:o.id,time:new Date(o.ts).toLocaleString('en-IN'),name:o.name,phone:o.phone,customer_email:o.email||'',gst_business:o.biz||'',gstin:o.gstin||'',address:o.address,city:o.city,pincode:o.pin,items:ks.map(function(k){return k+' x '+o.items[k]+' = ₹'+(o.items[k]*(PR[k]||0))}).join(' | '),subtotal:o.sub,delivery:o.ship,coupon:o.coupon||'',discount:o.disc||0,total:o.total,payment:o.pm==='cod'?'Cash on Delivery':(o.rzp?'Online (Razorpay)':'Online (UPI)'),utr:o.utr||'',rzp_payment_id:o.rzp||'',paid:o.paid?'YES':'NO',_subject:'New order '+o.id+' - ₹'+o.total};
  if(o.email)pl._replyto=o.email;return pl}
 function postOrder(o){return fetch(CFG.ORDER_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams(orderPayload(o)).toString()})}
 function markSent(id){var od=ld('tl_orders',[]);od.forEach(function(x){if(x.id===id){x.pend=false;x.sent=true}});sv('tl_orders',od)}
@@ -641,7 +664,7 @@ function trackHTML(o){
   +ship
   +'<ol class="otl">'+steps+'</ol></section>'
   +'<section class="tcard"><h3>Order details</h3><ul class="oitems">'+o.items.map(function(i){return '<li><span>'+esc(i.name)+' <small>× '+i.quantity+'</small></span><span>'+rup(i.price*i.quantity)+'</span></li>'}).join('')+'</ul>'
-  +'<dl class="osum"><div><dt>Subtotal</dt><dd>'+rup(o.subtotal)+'</dd></div><div><dt>Delivery</dt><dd>'+(o.delivery?rup(o.delivery):'Free')+'</dd></div><div class="tot"><dt>Total</dt><dd>'+rup(o.total)+'</dd></div><div><dt>Payment</dt><dd>'+esc(opay(o))+'</dd></div></dl></section>'
+  +'<dl class="osum"><div><dt>Subtotal</dt><dd>'+rup(o.subtotal)+'</dd></div>'+(o.discount>0?'<div><dt>Coupon'+(o.couponCode?' ('+esc(o.couponCode)+')':'')+'</dt><dd>− '+rup(o.discount)+'</dd></div>':'')+'<div><dt>Delivery</dt><dd>'+(o.delivery?rup(o.delivery):'Free')+'</dd></div><div class="tot"><dt>Total</dt><dd>'+rup(o.total)+'</dd></div><div><dt>Payment</dt><dd>'+esc(opay(o))+'</dd></div></dl></section>'
   +'<section class="tcard"><h3>Delivering to</h3><address class="oaddr"><b>'+esc(c.name||'')+'</b><br>'+esc(c.address||'')+'<br>'+esc(c.city||'')+' - '+esc(c.pin||'')+(c.phone?'<br>'+esc(c.phone):'')+'</address></section>'
   +'<div class="tact"><a class="btn" href="#pg=orders">All my orders</a><a class="btn alt" target="_blank" rel="noopener" href="'+wa+'">Need help? WhatsApp us</a><a class="btn alt" target="_blank" rel="noopener" href="/api/orders/'+encodeURIComponent(o.orderId)+'/invoice">🧾 Download invoice PDF</a></div>'}
 /* ---- quotation form ---- */
@@ -806,7 +829,7 @@ $('db').addEventListener('change',function(e){if(e.target&&e.target.name==='pm')
   var img=PIMG[n]?'<img alt="" loading="lazy" src="'+PIMG[n]+'">':ico(n,'');
   d.innerHTML=(e.off>0?'<span class="sale">Sale '+e.off+'%</span>':'')
    +'<div class="ph">'+img+'<button class="heart" aria-label="Add to wishlist"></button></div><h3></h3>'
-   +'<div class="price">'+f(e.p)+'<s>'+f(e.o)+'</s></div>'+(e.off>0?'<div class="sv">Save ₹'+(e.o-e.p).toLocaleString('en-IN')+'</div>':'')
+   +'<div class="price">'+f(e.p)+(e.off>0?'<s>'+f(e.o)+'</s>':'')+'</div>'+(e.off>0?'<div class="sv">Save ₹'+(e.o-e.p).toLocaleString('en-IN')+'</div>':'')
    +'<div class="act"><button class="add">🛒 Add to cart</button><a class="ow" target="_blank" rel="noopener" href="https://wa.me/'+WA+'?text='+encodeURIComponent('Hi Tinkerleaf, I have a question about: '+n)+'">💬 WhatsApp</a></div>';
   var h3=d.querySelector('h3');h3.textContent=n;
   var heart=d.querySelector('.heart');heart.dataset.n=n;heart.onclick=function(ev){ev.stopPropagation();togW(n)};
@@ -906,7 +929,7 @@ $('db').addEventListener('change',function(e){if(e.target&&e.target.name==='pm')
  window.addEventListener('hashchange',function(){if(location.hash.indexOf('#p=')===0)closeSug()});
 
  /* Brand tiles / old callers: they set q.value and dispatch "submit" - handled above. */
- window.TLshop={search:doSearch,setCat:setCat,clear:clearSearch,refresh:function(){render()},
+ window.TLshop={search:doSearch,setCat:setCat,clear:clearSearch,refresh:function(){CAT.forEach(function(e){var pr=PR[e.n];if(pr===undefined)return;e.p=pr;if(OP[e.n]!==undefined)e.o=OP[e.n];e.off=e.o>e.p?Math.round((e.o-e.p)/e.o*100):0});render()},
   info:function(n){var e=seen[n];if(!e)return null;var t=taxCat(e.cat);return{cat:e.cat,catLabel:t?t[1]:'',sub:e.sub,subLabel:subLabel(e.cat,e.sub),brand:e.brand}}};
  apiJSON('/api/products/popularity').then(function(d){POP=d||{};render()}).catch(function(){});
 

@@ -171,6 +171,103 @@ const P1 = 'Witty Fox 60W Soldering Iron', P2 = 'SG90 Micro Servo Motor 9g', P3 
     r = await fetch(BASE + '/api/orders/' + od + '/invoice', { headers: { cookie: a.cookie } }); const buf = Buffer.from(await r.arrayBuffer());
     ok(r.status === 200 && buf.slice(0, 4).toString() === '%PDF' && buf.length > 1500, 'invoice PDF generated (' + buf.length + ' bytes)');
     r = await fetch(BASE + '/api/orders/' + od + '/invoice', { headers: { cookie: mallory.cookie } }); ok(r.status === 404, "another customer cannot download someone else's invoice");
+
+    console.log('\n[12] Coupons');
+    const Coupon = require(path.join(ROOT, 'server/models/Coupon'));
+    await Product.updateMany({}, { $set: { stock: 100 } });
+    const post = (c, u, b) => c.req('POST', u, b);
+    r = await a.req('POST', '/api/admin/coupons', { code: 'HACK', type: 'flat', value: 50 }); ok(r.status === 403, 'customer cannot create coupons');
+    r = await new Client().req('GET', '/api/admin/coupons'); ok(r.status === 401, 'coupon list needs login');
+    r = await adm.req('POST', '/api/admin/coupons', { code: 'welcome10', type: 'percent', value: 10, maxDiscount: 100, minOrder: 500, perUserLimit: 1, description: '10% off' });
+    ok(r.status === 201 && r.data.code === 'WELCOME10' && r.data.active === true, 'admin creates coupon (code upper-cased)'); const wid = r.data._id;
+    r = await adm.req('POST', '/api/admin/coupons', { code: 'WELCOME10', type: 'flat', value: 5 }); ok(r.status === 409, 'duplicate code rejected');
+    r = await adm.req('POST', '/api/admin/coupons', { code: 'BAD1', type: 'percent', value: 150 }); ok(r.status === 400, 'percent over 100 rejected');
+    r = await adm.req('POST', '/api/admin/coupons', { code: 'a b', type: 'flat', value: 5 }); ok(r.status === 400, 'invalid code characters rejected');
+    r = await adm.req('POST', '/api/admin/coupons', { code: 'BAD2', type: 'flat', value: 5, startsAt: '2030-01-02', expiresAt: '2030-01-01' }); ok(r.status === 400, 'expiry before start rejected');
+    r = await adm.req('POST', '/api/admin/coupons', { code: 'FLAT50', type: 'flat', value: 50, usageLimit: 2, perUserLimit: 0 }); ok(r.status === 201, 'flat coupon created'); const fid = r.data._id;
+    r = await adm.req('POST', '/api/admin/coupons', { code: 'BIGFLAT', type: 'flat', value: 99999, perUserLimit: 0 }); ok(r.status === 201, 'huge flat coupon created');
+    r = await adm.req('POST', '/api/admin/coupons', { code: 'OLD', type: 'flat', value: 10, expiresAt: '2020-01-01' }); ok(r.status === 201, 'expired coupon created');
+    r = await adm.req('POST', '/api/admin/coupons', { code: 'SOON', type: 'flat', value: 10, startsAt: '2099-01-01' }); ok(r.status === 201, 'future coupon created');
+
+    await setCart([{ name: P3, quantity: 1 }]); // 4725
+    r = await post(a, '/api/coupons/validate', { code: 'welcome10' });
+    ok(r.status === 200 && r.data.discount === 100 && r.data.total === 4625, '10% capped at max discount Rs 100 -> total 4625 (lowercase code works)');
+    r = await post(new Client(), '/api/coupons/validate', { code: 'WELCOME10' }); ok(r.status === 401, 'coupon check needs login');
+    r = await post(a, '/api/coupons/validate', { code: 'NOPE' }); ok(r.status === 400, 'unknown code rejected');
+    r = await post(a, '/api/coupons/validate', { code: 'OLD' }); ok(r.status === 400 && /expired/i.test(r.data.error), 'expired coupon rejected');
+    r = await post(a, '/api/coupons/validate', { code: 'SOON' }); ok(r.status === 400 && /not active/i.test(r.data.error), 'not-yet-started coupon rejected');
+    await setCart([{ name: P1, quantity: 1 }]); // 164
+    r = await post(a, '/api/coupons/validate', { code: 'WELCOME10' }); ok(r.status === 400 && /at least/i.test(r.data.error), 'minimum order enforced');
+    r = await post(a, '/api/coupons/validate', { code: 'FLAT50' }); ok(r.status === 200 && r.data.discount === 50 && r.data.delivery === 60 && r.data.total === 174, 'flat 50 on 164 + 60 delivery = 174');
+    r = await post(a, '/api/coupons/validate', { code: 'BIGFLAT' }); ok(r.status === 200 && r.data.discount === 164 && r.data.total === 60, 'discount never exceeds the cart value (delivery still charged)');
+
+    // COD order with a coupon. The browser cannot choose the discount or total.
+    await setCart([{ name: P3, quantity: 1 }]);
+    r = await post(a, '/api/orders', { customer: TEST_ADDR, paymentMethod: 'cod', couponCode: 'welcome10', idempotencyKey: 'cpn-key-aaaaaaaaaaaa1', discount: 99999, total: 1 });
+    ok(r.status === 201 && r.data.discount === 100 && r.data.couponCode === 'WELCOME10' && r.data.total === 4625, 'COD order uses server-calculated coupon discount (forged total ignored)'); const co = r.data;
+    ok((await Coupon.findOne({ code: 'WELCOME10' })).usedCount === 1, 'coupon usedCount = 1');
+    await setCart([{ name: P3, quantity: 1 }]);
+    r = await post(a, '/api/coupons/validate', { code: 'WELCOME10' }); ok(r.status === 400 && /already used/i.test(r.data.error), 'per-customer limit: same user cannot reuse');
+    r = await post(a, '/api/orders', { customer: TEST_ADDR, paymentMethod: 'cod', couponCode: 'WELCOME10', idempotencyKey: 'cpn-key-aaaaaaaaaaaa2' }); ok(r.status === 409, 'order with an already-used coupon is refused');
+    ok((await Coupon.findOne({ code: 'WELCOME10' })).usedCount === 1, 'refused order did not consume the coupon');
+    r = await post(a, '/api/orders', { customer: TEST_ADDR, paymentMethod: 'cod', idempotencyKey: 'cpn-key-aaaaaaaaaaaa3' }); ok(r.status === 201 && r.data.discount === 0 && r.data.total === 4725, 'order without coupon has no discount');
+    r = await a.req('GET', '/api/orders/' + co.orderId); ok(r.data.discount === 100 && r.data.couponCode === 'WELCOME10', 'saved order stores coupon + discount');
+    r = await adm.req('GET', '/api/admin/orders'); ok(r.data.find(o => o.orderId === co.orderId)?.couponCode === 'WELCOME10', 'admin order list shows the coupon');
+    r = await fetch(BASE + '/api/orders/' + co.orderId + '/invoice', { headers: { cookie: a.cookie } }); const ib = Buffer.from(await r.arrayBuffer()); ok(r.status === 200 && ib.slice(0, 4).toString() === '%PDF', 'invoice with coupon line generates');
+    r = await a.req('PATCH', '/api/orders/' + co.orderId + '/cancel', {}); ok(r.status === 200, 'order with coupon cancelled');
+    ok((await Coupon.findOne({ code: 'WELCOME10' })).usedCount === 0, 'cancelling the order gives the coupon use back');
+    await setCart([{ name: P3, quantity: 1 }]);
+    r = await post(a, '/api/coupons/validate', { code: 'WELCOME10' }); ok(r.status === 200, 'coupon usable again after the order was cancelled');
+
+    // Total usage limit (FLAT50: 2 uses). Alice, Mallory ok, Carol blocked.
+    const carol = new Client(); await carol.req('POST', '/api/auth/register', { name: 'Carol', email: 'c@example.com', password: 'secret123' });
+    const buy = async (c, key) => { await c.req('PUT', '/api/cart', { items: [{ name: P1, quantity: 1 }] }); return c.req('POST', '/api/orders', { customer: TEST_ADDR, paymentMethod: 'cod', couponCode: 'FLAT50', idempotencyKey: key }); };
+    r = await buy(a, 'lim-key-aaaaaaaaaaaaaaa1'); ok(r.status === 201 && r.data.total === 174, 'usage 1 of 2 ok');
+    r = await buy(mallory, 'lim-key-aaaaaaaaaaaaaaa2'); ok(r.status === 201, 'usage 2 of 2 ok');
+    r = await buy(carol, 'lim-key-aaaaaaaaaaaaaaa3'); ok(r.status === 409 && /usage limit/i.test(r.data.error), 'usage limit reached: 3rd customer refused');
+    const fc = await Coupon.findOne({ code: 'FLAT50' }); ok(fc.usedCount === 2, 'usedCount stays at the limit (2)');
+    ok((await Order.countDocuments({ couponCode: 'FLAT50' })) === 2, 'refused order was not saved');
+    // Two buyers racing for one last use
+    await Coupon.updateOne({ code: 'FLAT50' }, { $set: { usageLimit: 3, usedCount: 2 } });
+    await mallory.req('PUT', '/api/cart', { items: [{ name: P1, quantity: 1 }] }); await carol.req('PUT', '/api/cart', { items: [{ name: P1, quantity: 1 }] });
+    const race = await Promise.all([carol.req('POST', '/api/orders', { customer: TEST_ADDR, paymentMethod: 'cod', couponCode: 'FLAT50', idempotencyKey: 'race-key-aaaaaaaaaaaa1' }), mallory.req('POST', '/api/orders', { customer: TEST_ADDR, paymentMethod: 'cod', couponCode: 'FLAT50', idempotencyKey: 'race-key-aaaaaaaaaaaa2' })]);
+    console.log('    race statuses:', race.map(x => x.status + ' ' + (x.data.error || '')).join(' | '));
+    ok(race.filter(x => x.status === 201).length === 1 && (await Coupon.findOne({ code: 'FLAT50' })).usedCount === 3, 'race for the last use: exactly one wins');
+
+    // Switch off (band), switch on, delete
+    r = await adm.req('PATCH', '/api/admin/coupons/' + wid, { active: false }); ok(r.status === 200 && r.data.active === false, 'admin disables a coupon');
+    r = await post(a, '/api/coupons/validate', { code: 'WELCOME10' }); ok(r.status === 400, 'disabled coupon cannot be used');
+    r = await a.req('PATCH', '/api/admin/coupons/' + wid, { active: true }); ok(r.status === 403, 'customer cannot toggle coupons');
+    r = await adm.req('PATCH', '/api/admin/coupons/' + wid, { active: true }); ok(r.status === 200 && r.data.active === true, 'admin enables it again');
+    await setCart([{ name: P3, quantity: 1 }]); r = await post(a, '/api/coupons/validate', { code: 'WELCOME10' }); ok(r.status === 200, 'enabled coupon works again');
+    r = await adm.req('GET', '/api/admin/coupons'); ok(r.status === 200 && r.data.length === 5, 'admin lists all coupons');
+
+    // Online payment with a coupon (Razorpay amount must be the discounted amount)
+    await setCart([{ name: P3, quantity: 1 }]);
+    const ck = 'cpn-pay-key-aaaaaaaaaa';
+    let rz3 = await post(a, '/api/payments/razorpay/order', { idempotencyKey: ck, couponCode: 'WELCOME10' }); ok(rz3.status === 200 && rz3.data.amount === 462500, 'razorpay order uses the discounted amount (462500 paise)');
+    const pay3 = await ctrl('/pay', { order_id: rz3.data.id });
+    r = await post(a, '/api/payments/razorpay/verify', Object.assign({ idempotencyKey: ck, couponCode: 'WELCOME10' }, pay3)); ok(r.status === 200 && r.data.verified, 'verify ok with coupon');
+    r = await post(a, '/api/orders', { customer: TEST_ADDR, paymentMethod: 'online', paymentId: pay3.razorpay_payment_id, razorpayOrderId: pay3.razorpay_order_id, razorpaySignature: pay3.razorpay_signature, idempotencyKey: ck, couponCode: 'WELCOME10' });
+    ok(r.status === 201 && r.data.total === 4625 && r.data.paymentStatus === 'paid' && r.data.discount === 100, 'online order with coupon created and paid');
+    ok(!(await ctrl('/refunds')).some(x => x.payment_id === pay3.razorpay_payment_id), 'no refund for a good coupon order');
+    await setCart([{ name: P3, quantity: 1 }]);
+    // Coupon switched off AFTER the customer paid => payment is refunded, no order is created
+    await Coupon.updateOne({ code: 'FLAT50' }, { $set: { active: true, usageLimit: 0, usedCount: 0, perUserLimit: 0, minOrder: 0 } });
+    await carol.req('PUT', '/api/cart', { items: [{ name: P3, quantity: 1 }] });
+    const ck3 = 'cpn-pay-key-cccccccccc'; const rz5 = await post(carol, '/api/payments/razorpay/order', { idempotencyKey: ck3, couponCode: 'FLAT50' }); ok(rz5.status === 200 && rz5.data.amount === 467500, 'flat 50 off 4725 -> 467500 paise');
+    const pay5 = await ctrl('/pay', { order_id: rz5.data.id });
+    await adm.req('PATCH', '/api/admin/coupons/' + fid, { active: false });
+    r = await post(carol, '/api/orders', { customer: TEST_ADDR, paymentMethod: 'online', paymentId: pay5.razorpay_payment_id, razorpayOrderId: pay5.razorpay_order_id, razorpaySignature: pay5.razorpay_signature, idempotencyKey: ck3, couponCode: 'FLAT50' });
+    ok(r.status === 409 && /coupon/i.test(r.data.error), 'coupon switched off after payment => order refused with a coupon message');
+    const rfs = (await ctrl('/refunds')).filter(x => x.payment_id === pay5.razorpay_payment_id); ok(rfs.length === 1 && rfs[0].amount === 467500, 'the paid amount (4675.00) was refunded exactly once, automatically');
+    ok(!(await Order.exists({ paymentId: pay5.razorpay_payment_id })), 'no order was created for the refunded payment');
+
+    // Delete
+    r = await adm.req('DELETE', '/api/admin/coupons/' + fid); ok(r.status === 200, 'admin deletes a coupon');
+    r = await adm.req('DELETE', '/api/admin/coupons/' + fid); ok(r.status === 404, 'deleting again -> 404');
+    r = await a.req('DELETE', '/api/admin/coupons/' + wid); ok(r.status === 403, 'customer cannot delete coupons');
+    r = await post(a, '/api/coupons/validate', { code: 'FLAT50' }); ok(r.status === 400, 'deleted coupon cannot be used');
   } catch (e) { fail++; failures.push('CRASH ' + e.stack); console.log('CRASH', e.stack); }
   finally { srv.kill(); await mongoose.disconnect(); }
   console.log(`\n${pass} passed, ${fail} failed`); if (fail) { console.log('Failures:\n - ' + failures.join('\n - ')); console.log('\n--- server log tail ---\n' + log.slice(-1500)); }

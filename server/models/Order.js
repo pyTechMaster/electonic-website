@@ -7,6 +7,8 @@ const orderSchema = new mongoose.Schema({
   items: [itemSchema],
   subtotal: Number,
   delivery: Number,
+  discount: { type: Number, default: 0 },
+  couponCode: { type: String, default: '' },
   total: Number,
   customer: { name: String, phone: String, email: String, address: String, city: String, pin: String, business: String, gstin: String },
   paymentMethod: { type: String, enum: ['cod', 'online'], default: 'cod' },

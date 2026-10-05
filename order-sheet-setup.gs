@@ -4,7 +4,7 @@
  */
 var OWNER_EMAIL = 'babliamisha@gmail.com';   // yahan par order ki email aayegi
 var SHEET_NAME  = 'Orders';
-var HEADERS = ['Time','Order ID','Name','Phone','Email','Address','City','Pincode','Items','Subtotal','Delivery','Total','Payment','UTR','Paid (customer)','Status','Razorpay Payment ID','Payment check','GST invoice (business / GSTIN)'];
+var HEADERS = ['Time','Order ID','Name','Phone','Email','Address','City','Pincode','Items','Subtotal','Delivery','Total','Payment','UTR','Paid (customer)','Status','Razorpay Payment ID','Payment check','GST invoice (business / GSTIN)','Coupon','Discount'];
 var QUOTE_SHEET = 'Quotes';
 var QUOTE_HEADERS = ['Time','Quote ID','Name','Organisation','Phone','Email','Products x Qty','Notes','Status'];
 
@@ -61,7 +61,8 @@ function doPost(e) {
     sh.appendRow([
       p.time, p.order_id, p.name, "'" + p.phone, p.customer_email, p.address, p.city, "'" + p.pincode,
       p.items, p.subtotal, p.delivery, p.total, p.payment, p.utr, p.paid, 'New', p.rzp_payment_id || '', check,
-      (p.gstin ? (p.gst_business || '') + ' / ' + p.gstin : '')
+      (p.gstin ? (p.gst_business || '') + ' / ' + p.gstin : ''),
+      p.coupon || '', Number(p.discount) || 0
     ]);
 
     MailApp.sendEmail({
@@ -72,7 +73,9 @@ function doPost(e) {
         'Name: ' + p.name + '\nPhone: ' + p.phone + '\nEmail: ' + (p.customer_email || '-') + '\n' +
         'Address: ' + p.address + ', ' + p.city + ' - ' + p.pincode + '\n\n' +
         'Items: ' + p.items + '\n' +
-        'Subtotal: Rs ' + p.subtotal + '\nDelivery: Rs ' + p.delivery + '\nTotal: Rs ' + p.total + '\n' +
+        'Subtotal: Rs ' + p.subtotal + '\n' +
+        (Number(p.discount) > 0 ? 'Coupon: ' + (p.coupon || '-') + ' (- Rs ' + p.discount + ')\n' : '') +
+        'Delivery: Rs ' + p.delivery + '\nTotal: Rs ' + p.total + '\n' +
         'Payment: ' + p.payment + (p.utr ? ' (UTR ' + p.utr + ')' : '') + (p.rzp_payment_id ? ' (Razorpay ' + p.rzp_payment_id + ')' : '') + '\n' +
         (check ? 'Payment check: ' + check + '\n' : '') +
         (p.gstin ? 'GST invoice: ' + p.gst_business + ' / ' + p.gstin + '\n' : '')

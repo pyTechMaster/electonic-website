@@ -11,6 +11,7 @@ const Order = require('./server/models/Order');
 const Product = require('./server/models/Product');
 const Cart = require('./server/models/Cart');
 const Review = require('./server/models/Review');
+const Coupon = require('./server/models/Coupon');
 const PaymentAttempt = require('./server/models/PaymentAttempt');
 const WebhookEvent = require('./server/models/WebhookEvent');
 const crypto = require('crypto');
@@ -73,7 +74,7 @@ function gstBreakup(total){
 }
 function orderEmailHtml(o){
   const rows=o.items.map(i=>`<tr><td>${String(i.name).replace(/[<>&]/g,'')}</td><td>${i.quantity}</td><td>₹${Number(i.price).toLocaleString('en-IN')}</td></tr>`).join('');
-  return `<div style="font-family:Arial,sans-serif;max-width:650px;margin:auto"><h2 style="color:#1f5c3f">🍃 Tinkerleaf — Order ${o.orderId}</h2><p>Thank you, ${String(o.customer.name).replace(/[<>&]/g,'')}.</p><p><b>Status:</b> ${o.status}${(o.courier||o.trackingNumber)?`<br><b>Courier:</b> ${String(o.courier||'-').replace(/[<>&]/g,'')} &nbsp; <b>Tracking no.:</b> ${String(o.trackingNumber||'-').replace(/[<>&]/g,'')}`:''}<br><b>Payment:</b> ${o.paymentMethod} / ${o.paymentStatus}</p><table cellpadding="8" cellspacing="0" border="1" style="border-collapse:collapse;width:100%"><tr><th>Product</th><th>Qty</th><th>Price</th></tr>${rows}</table><p><b>Subtotal:</b> ₹${o.subtotal.toLocaleString('en-IN')}<br><b>Delivery:</b> ${o.delivery?`₹${o.delivery.toLocaleString('en-IN')}`:'FREE'}<br><b>Total:</b> ₹${o.total.toLocaleString('en-IN')}</p><p><b>Delivery:</b> ${String(o.customer.address).replace(/[<>&]/g,'')}, ${String(o.customer.city).replace(/[<>&]/g,'')} - ${String(o.customer.pin).replace(/[<>&]/g,'')}</p></div>`;
+  return `<div style="font-family:Arial,sans-serif;max-width:650px;margin:auto"><h2 style="color:#1f5c3f">🍃 Tinkerleaf — Order ${o.orderId}</h2><p>Thank you, ${String(o.customer.name).replace(/[<>&]/g,'')}.</p><p><b>Status:</b> ${o.status}${(o.courier||o.trackingNumber)?`<br><b>Courier:</b> ${String(o.courier||'-').replace(/[<>&]/g,'')} &nbsp; <b>Tracking no.:</b> ${String(o.trackingNumber||'-').replace(/[<>&]/g,'')}`:''}<br><b>Payment:</b> ${o.paymentMethod} / ${o.paymentStatus}</p><table cellpadding="8" cellspacing="0" border="1" style="border-collapse:collapse;width:100%"><tr><th>Product</th><th>Qty</th><th>Price</th></tr>${rows}</table><p><b>Subtotal:</b> ₹${o.subtotal.toLocaleString('en-IN')}<br>${o.discount>0?`<b>Coupon${o.couponCode?' ('+String(o.couponCode).replace(/[<>&]/g,'')+')':''}:</b> -₹${o.discount.toLocaleString('en-IN')}<br>`:''}<b>Delivery:</b> ${o.delivery?`₹${o.delivery.toLocaleString('en-IN')}`:'FREE'}<br><b>Total:</b> ₹${o.total.toLocaleString('en-IN')}</p><p><b>Delivery:</b> ${String(o.customer.address).replace(/[<>&]/g,'')}, ${String(o.customer.city).replace(/[<>&]/g,'')} - ${String(o.customer.pin).replace(/[<>&]/g,'')}</p></div>`;
 }
 
 const app = express();
@@ -128,6 +129,14 @@ const sensitiveAuthRateLimit = rateLimit({
   standardHeaders: 'draft-8',
   legacyHeaders: false,
   message: { error: 'Too many requests. Please try again later.' }
+});
+
+const couponRateLimit = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  limit: 30,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  message: { error: 'Too many coupon attempts. Please try again in a few minutes.' }
 });
 
 const registerRateLimit = rateLimit({
@@ -283,7 +292,38 @@ app.delete('/api/addresses/:index', requireAuth, async(req,res)=>{ const i=Numbe
 
 
 app.get('/api/payments/razorpay/config', (req,res)=>res.json({enabled:!!razorpay,keyId:process.env.RAZORPAY_KEY_ID||null}));
-async function getServerCartTotal(userId){
+// ---- Coupons ---------------------------------------------------------------
+const COUPON_CODE_RE = /^[A-Z0-9][A-Z0-9_-]{2,19}$/;
+function cleanCouponCode(v){ return String(v==null?'':v).trim().toUpperCase().slice(0,30); }
+function couponDiscount(c, subtotal){
+  let d = c.type==='percent' ? Math.floor(subtotal*c.value/100) : Math.floor(c.value);
+  if(c.type==='percent' && c.maxDiscount>0) d=Math.min(d,c.maxDiscount);
+  return Math.max(0, Math.min(d, subtotal));
+}
+// Checks a coupon against a cart subtotal. Throws an Error with a customer-friendly message when it cannot be used.
+async function checkCoupon(code, userId, subtotal){
+  const fail=m=>{ const e=new Error(m); e.coupon=true; return e; };
+  code=cleanCouponCode(code);
+  if(!code) throw fail('Enter a coupon code.');
+  const c=await Coupon.findOne({code});
+  if(!c || !c.active) throw fail('This coupon code is not valid.');
+  const now=new Date();
+  if(c.startsAt && now<c.startsAt) throw fail('This coupon is not active yet.');
+  if(c.expiresAt && now>c.expiresAt) throw fail('This coupon has expired.');
+  if(c.usageLimit>0 && c.usedCount>=c.usageLimit) throw fail('This coupon has reached its usage limit.');
+  if(c.minOrder>0 && subtotal<c.minOrder) throw fail('This coupon needs a cart of at least ₹'+c.minOrder.toLocaleString('en-IN')+'.');
+  if(c.perUserLimit>0){
+    const used=await Order.countDocuments({userId,couponCode:c.code,status:{$ne:'cancelled'}});
+    if(used>=c.perUserLimit) throw fail(c.perUserLimit===1?'You have already used this coupon.':'You have already used this coupon the maximum number of times.');
+  }
+  const discount=couponDiscount(c,subtotal);
+  if(discount<=0) throw fail('This coupon gives no discount on your cart.');
+  return {coupon:c,discount};
+}
+
+// Prices always come from the database, never from the browser. A coupon (optional) is re-checked here every time.
+// lenient=true: a bad coupon does not throw, it is reported in couponError and the cart is priced without it.
+async function getServerCartTotal(userId, couponCode, lenient){
   const c=await Cart.findOne({userId});
   const cartItems=Array.isArray(c?.items)?c.items:[];
   if(!cartItems.length) throw new Error('Your server cart is empty. Please refresh your cart and try again.');
@@ -293,8 +333,13 @@ async function getServerCartTotal(userId){
   const items=cartItems.map(i=>({name:i.name,quantity:Number(i.quantity),price:Number(byName.get(i.name).price)}));
   if(items.some(i=>!Number.isInteger(i.quantity)||i.quantity<1)) throw new Error('Invalid cart quantity.');
   const subtotal=items.reduce((sum,i)=>sum+i.price*i.quantity,0);
-  const delivery=subtotal>=1000?0:60;
-  return {items,subtotal,delivery,total:subtotal+delivery};
+  const delivery=subtotal>=1000?0:60; // free-delivery rule uses the amount BEFORE the coupon
+  let discount=0, coupon=null, couponError='';
+  if(cleanCouponCode(couponCode)){
+    try{ const r=await checkCoupon(couponCode,userId,subtotal); discount=r.discount; coupon=r.coupon; }
+    catch(e){ if(!e.coupon||!lenient) throw e; couponError=e.message; }
+  }
+  return {items,subtotal,delivery,discount,coupon,couponCode:coupon?coupon.code:'',couponError,total:subtotal-discount+delivery};
 }
 
 async function refundPayment(paymentId, amountPaise){
@@ -303,12 +348,18 @@ async function refundPayment(paymentId, amountPaise){
   catch(e){ console.error('Razorpay refund failed:', e.message); return null; }
 }
 
+app.post('/api/coupons/validate', requireAuth, couponRateLimit, async (req,res)=>{
+  try{
+    const cart=await getServerCartTotal(req.user._id, req.body?.code);
+    res.json({ok:true,code:cart.couponCode,description:cart.coupon.description||'',type:cart.coupon.type,value:cart.coupon.value,subtotal:cart.subtotal,discount:cart.discount,delivery:cart.delivery,total:cart.total});
+  }catch(e){ res.status(400).json({error:e.message||'Could not apply coupon'}); }
+});
 app.post('/api/payments/razorpay/order', requireAuth, async (req,res)=>{
   try{
     if(!razorpay) return res.status(503).json({error:'Online payment is not configured. Add Razorpay keys to .env.'});
     const idempotencyKey=String(req.body.idempotencyKey||req.headers['x-idempotency-key']||'').trim();
     if(!idempotencyKey || idempotencyKey.length<16 || idempotencyKey.length>100) return res.status(400).json({error:'A valid payment idempotency key is required'});
-    const cart=await getServerCartTotal(req.user._id);
+    const cart=await getServerCartTotal(req.user._id, req.body.couponCode);
     const amount=Math.round(cart.total*100);
     if(!Number.isInteger(amount)||amount<100) return res.status(400).json({error:'Invalid server-calculated payment amount'});
     const existing=await PaymentAttempt.findOne({idempotencyKey,userId:req.user._id});
@@ -316,7 +367,7 @@ app.post('/api/payments/razorpay/order', requireAuth, async (req,res)=>{
       if(Number(existing.amountPaise)!==amount) return res.status(409).json({error:'This payment attempt no longer matches the current cart total. Please start checkout again.'});
       return res.json({id:existing.razorpayOrderId,amount:existing.amountPaise,currency:existing.currency,keyId:process.env.RAZORPAY_KEY_ID,idempotencyKey});
     }
-    const rp=await razorpay.orders.create({amount,currency:'INR',receipt:String(req.body.receipt||('TL'+Date.now())).slice(0,40),notes:{userId:String(req.user._id),serverTotal:String(cart.total),idempotencyKey}});
+    const rp=await razorpay.orders.create({amount,currency:'INR',receipt:String(req.body.receipt||('TL'+Date.now())).slice(0,40),notes:{userId:String(req.user._id),serverTotal:String(cart.total),coupon:cart.couponCode||'',idempotencyKey}});
     await PaymentAttempt.create({idempotencyKey,userId:req.user._id,razorpayOrderId:rp.id,amountPaise:rp.amount,currency:rp.currency,status:'created'});
     res.json({id:rp.id,amount:rp.amount,currency:rp.currency,keyId:process.env.RAZORPAY_KEY_ID,idempotencyKey});
   }catch(e){
@@ -337,11 +388,11 @@ app.post('/api/payments/razorpay/verify', requireAuth, async (req,res)=>{
     if(expected.length!==supplied.length || !crypto.timingSafeEqual(Buffer.from(expected),Buffer.from(supplied))) return res.status(400).json({error:'Payment verification failed'});
     const rpOrder=await razorpay.orders.fetch(razorpay_order_id);
     if(!rpOrder || String(rpOrder.notes?.userId||'')!==String(req.user._id)) return res.status(403).json({error:'Payment does not belong to this account'});
-    const cart=await getServerCartTotal(req.user._id);
+    const cart=await getServerCartTotal(req.user._id, req.body.couponCode, true);
     const expectedAmount=Math.round(cart.total*100);
     if(Number(rpOrder.amount)!==expectedAmount) {
       await refundPayment(razorpay_payment_id, Number(rpOrder.amount));
-      return res.status(409).json({error:'Payment amount does not match the current server cart. The payment has been sent for refund.'});
+      return res.status(409).json({error:(cart.couponError?'Coupon problem: '+cart.couponError+' ':'')+'Payment amount does not match the current server cart. The payment has been sent for refund.'});
     }
     let payment=await razorpay.payments.fetch(razorpay_payment_id);
     for(let i=0;i<3 && payment && String(payment.status||'').toLowerCase()==='authorized';i++){ await sleep(1500); payment=await razorpay.payments.fetch(razorpay_payment_id); }
@@ -363,7 +414,7 @@ app.get('/api/delivery/check/:pin', (req,res)=>{
   res.json({serviceable,pin,mode:String(process.env.DELIVERY_MODE||'all_india').toLowerCase(),message:serviceable?'Delivery is available to this pincode.':'Sorry, delivery is not currently available to this pincode.'});
 });
 
-const orderBrief=o=>({ok:true,orderId:o.orderId,status:o.status,items:o.items,subtotal:o.subtotal,delivery:o.delivery,total:o.total,paymentStatus:o.paymentStatus,duplicate:true});
+const orderBrief=o=>({ok:true,orderId:o.orderId,status:o.status,items:o.items,subtotal:o.subtotal,delivery:o.delivery,discount:o.discount||0,couponCode:o.couponCode||'',total:o.total,paymentStatus:o.paymentStatus,duplicate:true});
 app.post('/api/orders', requireAuth, async (req,res)=>{
   let paymentId='', paymentMethod='cod', cart=null;
   const b=req.body||{};
@@ -379,8 +430,11 @@ app.post('/api/orders', requireAuth, async (req,res)=>{
     if(!isServiceablePin(customer.pin)) return res.status(422).json({error:'Delivery is not available to this pincode'});
     // A retry for a payment that already produced this user's order (cart is empty by now) just returns that order.
     if(b.paymentMethod==='online' && b.paymentId){ const mine=await Order.findOne({paymentId:String(b.paymentId),userId:req.user._id}); if(mine) return res.json(orderBrief(mine)); }
-    cart=await getServerCartTotal(req.user._id);
     paymentMethod=b.paymentMethod==='online'?'online':'cod';
+    // A bad coupon on an ONLINE order must not throw here: the customer may already have paid the discounted amount,
+    // so it falls through to the amount check below, which refunds the payment.
+    cart=await getServerCartTotal(req.user._id, b.couponCode, true);
+    if(cart.couponError && paymentMethod!=='online') return res.status(409).json({error:cart.couponError});
     let paymentStatus='pending', razorpayOrderId='', razorpaySignature='';
     if(paymentMethod==='online'){
       if(!razorpay) return res.status(503).json({error:'Online payment is not configured'});
@@ -400,16 +454,25 @@ app.post('/api/orders', requireAuth, async (req,res)=>{
       if(!ownPayment) return res.status(403).json({error:'Payment does not belong to this account'});
       if(Number(rpOrder.amount)!==expectedAmount || Number(payment.amount)!==expectedAmount || payStatus!=='captured'){
         if(payStatus==='captured' && Number(payment.amount)>0) await refundPayment(rzPaymentId, Number(payment.amount));
-        return res.status(409).json({error:'Payment could not be matched to your current cart. Any captured payment has been sent for refund.'});
+        return res.status(409).json({error:(cart.couponError?'Coupon problem: '+cart.couponError+' ':'')+'Payment could not be matched to your current cart. Any captured payment has been sent for refund.'});
       }
       paymentStatus='paid'; paymentId=rzPaymentId; razorpayOrderId=rzOrderId; razorpaySignature=supplied;
     }
-    const doc={userId:req.user._id,items:cart.items,subtotal:cart.subtotal,delivery:cart.delivery,total:cart.total,customer,paymentMethod,paymentStatus,status:'placed',statusHistory:[{status:'placed',note:'Order placed',at:new Date()}]};
+    const doc={userId:req.user._id,items:cart.items,subtotal:cart.subtotal,delivery:cart.delivery,discount:cart.discount,couponCode:cart.couponCode,total:cart.total,customer,paymentMethod,paymentStatus,status:'placed',statusHistory:[{status:'placed',note:'Order placed',at:new Date()}]};
     if(key) doc.idempotencyKey=key;
     if(paymentMethod==='online'){ doc.paymentId=paymentId; doc.razorpayOrderId=razorpayOrderId; doc.razorpaySignature=razorpaySignature; }
     // Reserve stock atomically (stock >= qty), then create the order. Anything that fails here is rolled back.
-    const changed=[]; let order=null;
+    const changed=[]; let order=null, couponReserved=null;
     try {
+      // Reserve one use of the coupon atomically (so a usage limit can never be exceeded by two buyers at once).
+      if(cart.coupon){
+        // Add 1 first, then check the limit: two buyers racing for the last use can never both get it.
+        const got=await Coupon.findOneAndUpdate({_id:cart.coupon._id,active:true},{$inc:{usedCount:1}},{new:true});
+        if(got) couponReserved=got;
+        if(!got || (got.usageLimit>0 && got.usedCount>got.usageLimit)){
+          const e=new Error('This coupon has just reached its usage limit or was switched off.'); e.status=409; throw e;
+        }
+      }
       for(const i of cart.items){
         const p=await Product.findOneAndUpdate({name:i.name,stock:{$gte:i.quantity}},{$inc:{stock:-i.quantity}},{new:true});
         if(!p) { const e=new Error('Not enough stock for '+i.name); e.status=409; throw e; }
@@ -422,6 +485,7 @@ app.post('/api/orders', requireAuth, async (req,res)=>{
       if(!order) throw new Error('Could not allocate an order number. Please try again.');
     } catch(err) {
       for(const r of changed) await Product.updateOne({name:r.name},{$inc:{stock:r.quantity}}).catch(()=>{});
+      if(couponReserved) await Coupon.updateOne({_id:couponReserved._id,usedCount:{$gt:0}},{$inc:{usedCount:-1}}).catch(()=>{});
       if(err?.code===11000){
         // Two identical requests raced (double click). The other one owns the payment/order, so do NOT refund.
         const or=[]; if(key) or.push({idempotencyKey:key}); if(paymentId) or.push({paymentId});
@@ -439,7 +503,7 @@ app.post('/api/orders', requireAuth, async (req,res)=>{
     await Cart.findOneAndUpdate({userId:req.user._id},{items:[]},{upsert:true}).catch(()=>{});
     if(order.customer.email) sendMail(order.customer.email,`Tinkerleaf order ${order.orderId} confirmed`,`Your Tinkerleaf order ${order.orderId} for ₹${order.total} has been placed. Current status: ${order.status}.`,orderEmailHtml(order));
     if(process.env.ADMIN_EMAIL) sendMail(process.env.ADMIN_EMAIL,`New Tinkerleaf order ${order.orderId} — ₹${order.total}`,`New order ${order.orderId} from ${order.customer.name}. Total ₹${order.total}.`,orderEmailHtml(order));
-    return res.status(201).json({ok:true,orderId:order.orderId,status:order.status,items:order.items,subtotal:order.subtotal,delivery:order.delivery,total:order.total,paymentStatus:order.paymentStatus});
+    return res.status(201).json({ok:true,orderId:order.orderId,status:order.status,items:order.items,subtotal:order.subtotal,delivery:order.delivery,discount:order.discount||0,couponCode:order.couponCode||'',total:order.total,paymentStatus:order.paymentStatus});
   } catch(e){ console.error('Order error:',e.message); res.status(400).json({error:e.message||'Could not save order'}); }
 });
 app.get('/api/orders/my', requireAuth, async (req,res)=>{ res.json(await Order.find({userId:req.user._id}).select('-razorpaySignature').sort({createdAt:-1})); });
@@ -475,6 +539,7 @@ app.get('/api/orders/:orderId/invoice', requireAuth, async(req,res)=>{
     });
     doc.moveTo(350,y+5).lineTo(550,y+5).stroke(); y+=18;
     doc.font('Helvetica').text('Subtotal',350,y,{width:100}).text(money(o.subtotal),450,y,{width:100,align:'right'}); y+=18;
+    if(o.discount>0){ doc.text('Coupon'+(o.couponCode?' ('+o.couponCode+')':''),350,y,{width:100}).text('- '+money(o.discount),450,y,{width:100,align:'right'}); y+=18; }
     doc.text('Delivery',350,y,{width:100}).text(money(o.delivery),450,y,{width:100,align:'right'}); y+=18;
     if(gst.rate){
       doc.text(`Taxable value (${gst.rate}% included)`,350,y,{width:100}).text(money(gst.taxable),450,y,{width:100,align:'right'}); y+=18;
@@ -499,6 +564,7 @@ async function cancelOrderCore(order, allowed, note, extraSet){
     {new:true});
   if(!claimed) return null;
   for(const i of claimed.items||[]){ if(i.name && Number.isInteger(i.quantity) && i.quantity>0) await Product.updateOne({name:i.name},{$inc:{stock:i.quantity}}); }
+  if(claimed.couponCode) await Coupon.updateOne({code:claimed.couponCode,usedCount:{$gt:0}},{$inc:{usedCount:-1}}).catch(()=>{}); // cancelled order frees the coupon use
   if(claimed.paymentMethod==='online' && claimed.paymentStatus==='paid' && claimed.paymentId){
     const amountPaise=Math.round(Number(claimed.total)*100);
     const r=await refundPayment(claimed.paymentId, amountPaise);
@@ -597,6 +663,54 @@ app.patch('/api/admin/orders/:orderId/status', requireAuth, requireAdmin, async 
     if(changed && o.customer?.email) sendMail(o.customer.email,`Tinkerleaf order ${o.orderId} — ${o.status}`,`Your Tinkerleaf order ${o.orderId} is now ${o.status}.`,orderEmailHtml(o));
     res.json(o);
   }catch(e){ console.error(e); res.status(500).json({error:'Could not update order'}); }
+});
+
+// ---- Admin: coupons ----------------------------------------------------------
+function parseCouponBody(b, forCreate){
+  const out={}, err=m=>{ const e=new Error(m); e.status=400; return e; };
+  const num=(v,min,max,label)=>{ const n=Number(v); if(!Number.isFinite(n)||n<min||n>max) throw err(label+' is not valid.'); return n; };
+  const date=(v,label)=>{ if(v===''||v==null) return null; const d=new Date(v); if(isNaN(d)) throw err(label+' is not a valid date.'); return d; };
+  if(forCreate){
+    const code=cleanCouponCode(b.code);
+    if(!COUPON_CODE_RE.test(code)) throw err('Coupon code must be 3-20 characters: letters, numbers, - or _.');
+    out.code=code;
+  }
+  if(forCreate || b.type!==undefined){ if(!['percent','flat'].includes(b.type)) throw err('Choose percent or flat discount.'); out.type=b.type; }
+  if(forCreate || b.value!==undefined){ out.value=num(b.value,1,1e7,'Discount value'); }
+  const type=out.type||b.type;
+  if(out.value!==undefined && type==='percent' && out.value>100) throw err('Percent discount cannot be more than 100.');
+  if(out.value!==undefined && type==='flat') out.value=Math.floor(out.value);
+  if(b.description!==undefined) out.description=str(b.description,200);
+  if(b.maxDiscount!==undefined) out.maxDiscount=Math.floor(num(b.maxDiscount||0,0,1e7,'Max discount'));
+  if(b.minOrder!==undefined) out.minOrder=Math.floor(num(b.minOrder||0,0,1e7,'Minimum order'));
+  if(b.usageLimit!==undefined) out.usageLimit=Math.floor(num(b.usageLimit||0,0,1e7,'Usage limit'));
+  if(b.perUserLimit!==undefined) out.perUserLimit=Math.floor(num(b.perUserLimit||0,0,1e4,'Per-customer limit'));
+  if(b.startsAt!==undefined) out.startsAt=date(b.startsAt,'Start date');
+  if(b.expiresAt!==undefined) out.expiresAt=date(b.expiresAt,'Expiry date');
+  if(out.startsAt && out.expiresAt && out.expiresAt<=out.startsAt) throw err('Expiry must be after the start date.');
+  if(b.active!==undefined) out.active=!!b.active;
+  return out;
+}
+app.get('/api/admin/coupons', requireAuth, requireAdmin, async(req,res)=>{ res.json(await Coupon.find().sort({createdAt:-1}).limit(500)); });
+app.post('/api/admin/coupons', requireAuth, requireAdmin, async(req,res)=>{
+  try{ res.status(201).json(await Coupon.create(parseCouponBody(req.body||{},true))); }
+  catch(e){
+    if(e?.code===11000) return res.status(409).json({error:'A coupon with this code already exists.'});
+    res.status(e.status||400).json({error:e.message||'Could not create coupon'});
+  }
+});
+// Edit a coupon, or switch it on / off ({active:true|false}). The code itself cannot be changed.
+app.patch('/api/admin/coupons/:id', requireAuth, requireAdmin, async(req,res)=>{
+  try{
+    const c=await Coupon.findById(req.params.id); if(!c) return res.status(404).json({error:'Coupon not found'});
+    const upd=parseCouponBody(Object.assign({type:c.type},req.body||{}),false); delete upd.code;
+    if(upd.value!==undefined && c.type==='percent' && upd.value>100) throw Object.assign(new Error('Percent discount cannot be more than 100.'),{status:400});
+    Object.assign(c,upd); await c.save(); res.json(c);
+  }catch(e){ res.status(e.status||400).json({error:e.message||'Could not update coupon'}); }
+});
+app.delete('/api/admin/coupons/:id', requireAuth, requireAdmin, async(req,res)=>{
+  try{ const r=await Coupon.findByIdAndDelete(req.params.id); if(!r) return res.status(404).json({error:'Coupon not found'}); res.json({ok:true}); }
+  catch(e){ res.status(400).json({error:'Could not delete coupon'}); }
 });
 
 app.get('/api/wishlist', requireAuth, async(req,res)=>{ const u=await User.findById(req.user._id); res.json(u.wishlist||[]); });

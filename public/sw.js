@@ -2,7 +2,7 @@
    - Pages / scripts / styles: network first, saved copy used only when offline (so updates always arrive).
    - Product images: saved after first view (fast repeat visits).
    - /api/*, admin and payment pages are NEVER cached. */
-const VERSION = 'tl-v8';
+const VERSION = 'tl-v10';
 const SHELL = 'shell-' + VERSION, IMGS = 'img-' + VERSION;
 const SHELL_FILES = ['/', '/style.css', '/script.js', '/stock.js', '/qrcode.js', '/site.webmanifest', '/favicon.svg', '/icon-192.png', '/icon-512.png', '/apple-touch-icon.png'];
 
